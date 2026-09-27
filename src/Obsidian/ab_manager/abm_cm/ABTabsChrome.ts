@@ -23,9 +23,26 @@ export interface ABTabsChromeOptions {
 /** 当前打开的标签右键菜单（全局单例，避免叠开且关不掉） */
 let activeTabMenu: Menu | null = null
 
+/** 拖拽来源下标：部分浏览器 drop 时 getData 自定义类型会空，用此兜底 */
+let draggingTabFrom = -1
+let dragCommitLock = false
+
 export function hideABTabsMenu() {
   try { activeTabMenu?.hide() } catch (_) { /* ignore */ }
   activeTabMenu = null
+}
+
+/** 列表重排：from → to（to 为放下时目标项的原始下标） */
+export function reorderPairs(pairs: C2ListPair[], from: number, to: number): C2ListPair[] {
+  if (from < 0 || to < 0 || from >= pairs.length || to >= pairs.length || from === to) {
+    return pairs
+  }
+  const next = pairs.slice()
+  const [moved] = next.splice(from, 1)
+  // 先删后插：from < to 时目标下标左移一位
+  const insertAt = from < to ? to - 1 : to
+  next.splice(insertAt, 0, moved)
+  return next
 }
 
 /**
@@ -68,6 +85,19 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
     wireNavItem(item)
   }
 
+  function commitReorder(from: number, to: number) {
+    if (from < 0 || to < 0 || from === to) return
+    if (dragCommitLock) return
+    dragCommitLock = true
+    try {
+      // 放下后激活目标落点（重排后的下标）
+      const activate = from < to ? to - 1 : to
+      onCommit((pairs) => reorderPairs(pairs, from, to), activate)
+    } finally {
+      window.setTimeout(() => { dragCommitLock = false }, 100)
+    }
+  }
+
   function wireNavItem(item: HTMLElement) {
     if (item.getAttribute("data-ab-tabs-wired") === "1") return
     item.setAttribute("data-ab-tabs-wired", "1")
@@ -88,20 +118,25 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
         return
       }
       dragging = true
+      draggingTabFrom = idx
       item.classList.add("ab-dragging")
+      // text/plain 兜底：部分环境自定义 MIME 在 drop 时读不到
+      e.dataTransfer?.setData("text/plain", String(idx))
       e.dataTransfer?.setData("text/ab-tab-index", String(idx))
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move"
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move"
+      }
     })
 
     item.addEventListener("dragend", () => {
       item.classList.remove("ab-dragging")
       for (const el of navItems()) el.classList.remove("ab-drag-over")
-      // 拖拽结束后抑制一次 click，避免误切换
       if (dragging) {
         item.classList.add("ab-just-dragged")
         window.setTimeout(() => item.classList.remove("ab-just-dragged"), 0)
       }
       dragging = false
+      draggingTabFrom = -1
     })
 
     item.addEventListener(
@@ -124,7 +159,10 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
       if (!item.classList.contains("ab-dragging")) item.classList.add("ab-drag-over")
     })
 
-    item.addEventListener("dragleave", () => {
+    item.addEventListener("dragleave", (e: DragEvent) => {
+      // 只在真正离开当前项时清样式（避免子节点触发误清）
+      const related = e.relatedTarget as Node | null
+      if (related && item.contains(related)) return
       item.classList.remove("ab-drag-over")
     })
 
@@ -132,17 +170,16 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
       e.preventDefault()
       e.stopPropagation()
       item.classList.remove("ab-drag-over")
-      const fromRaw = e.dataTransfer?.getData("text/ab-tab-index") ?? ""
-      const from = parseInt(fromRaw, 10)
+      const fromRaw =
+        e.dataTransfer?.getData("text/ab-tab-index")
+        || e.dataTransfer?.getData("text/plain")
+        || ""
+      let from = parseInt(fromRaw, 10)
+      if (isNaN(from) || from < 0) from = draggingTabFrom
       const to = parseInt(item.getAttribute("data-ab-item-index") || "-1", 10)
+      draggingTabFrom = -1
       if (isNaN(from) || isNaN(to) || from < 0 || to < 0 || from === to) return
-      onCommit((pairs) => {
-        if (from >= pairs.length || to >= pairs.length) return pairs
-        const next = pairs.slice()
-        const [moved] = next.splice(from, 1)
-        next.splice(to, 0, moved)
-        return next
-      }, to)
+      commitReorder(from, to)
     })
 
     item.addEventListener("contextmenu", (e: MouseEvent) => {

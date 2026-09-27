@@ -165,10 +165,17 @@ export class ABReplacer_Widget extends WidgetType {
         tabRoot: root,
         onCommit: (mutate, activateIndex) => {
           if (!this.global_editor) return
-          syncRangeFromDom()
+          if (!syncRangeFromDom()) {
+            new Notice("写入失败：无法定位块位置")
+            return
+          }
           const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
           const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
           const fullSrc = this.global_editor.getRange(from, to)
+          if (!fullSrc.trim()) {
+            new Notice("写入失败：块内容为空")
+            return
+          }
           const newFull = this.applyC2PairsMutation(fullSrc, mutate)
           if (newFull == null) {
             new Notice("写入失败：无法解析标签结构")
@@ -654,7 +661,11 @@ export class ABReplacer_Widget extends WidgetType {
     fullSrc: string,
     mutate: (pairs: C2ListPair[]) => C2ListPair[],
   ): string | null {
-    const oldContent = this.rangeSpec.content
+    // 以编辑器当前区间文本为准刷新 content，避免装饰 remap 后 rangeSpec.content 过期导致「写入失败」
+    const oldContent = this.resolveContentInFullSrc(fullSrc)
+    if (oldContent == null) return null
+    this.rangeSpec.content = oldContent
+
     const isTitleSrc = this.isTitleC2Source(oldContent)
     let data: List_C2ListItem
     try {
@@ -672,6 +683,51 @@ export class ABReplacer_Widget extends WidgetType {
       ? C2ListProcess.c2data2title(newData)
       : C2ListProcess.c2data2list(newData)
     return this.replaceContentInFullSrc(fullSrc, oldContent, newContent)
+  }
+
+  /**
+   * 从当前 fullSrc 解析出可替换的 content 段。
+   * 优先匹配缓存的 rangeSpec.content；对不上则按选择器从 fullSrc 剥离 header。
+   */
+  private resolveContentInFullSrc(fullSrc: string): string | null {
+    const cached = this.rangeSpec.content
+    if (cached) {
+      if (fullSrc.includes(cached)) return cached
+      const alt = cached.replace(/\n$/, "")
+      if (alt && fullSrc.includes(alt)) return alt
+      const withNl = cached.endsWith("\n") ? cached : cached + "\n"
+      if (fullSrc.includes(withNl)) return withNl
+    }
+
+    // 列表/括号头：首行是 [header]，其余为 content
+    const lines = fullSrc.split("\n")
+    if (lines.length >= 2) {
+      const first = lines[0]
+      const looksBraceHeader = /^\s*[`\[].*[\]`]\s*$/.test(first)
+        || (this.rangeSpec.header && first.includes("[") && first.includes("]"))
+      if (looksBraceHeader) {
+        return lines.slice(1).join("\n")
+      }
+      // mdit ::: header
+      if (/^\s*:{3,}/.test(first)) {
+        // 去掉首尾 ::: 行
+        let end = lines.length
+        for (let i = lines.length - 1; i > 0; i--) {
+          if (/^\s*:{3,}/.test(lines[i])) { end = i; break }
+        }
+        return lines.slice(1, end).join("\n")
+      }
+    }
+
+    // heading 源：整段即 content
+    if (this.rangeSpec.selector === "heading" || /^#{1,6}\s/.test(fullSrc.trimStart())) {
+      return fullSrc
+    }
+
+    // 兜底：若首行是列表项，整段当 content
+    if (/^\s*[-*+]\s/.test(fullSrc)) return fullSrc
+
+    return null
   }
 
   /** 判断内容是否为标题大纲源（title2card / title2tabs / title2timeline） */
