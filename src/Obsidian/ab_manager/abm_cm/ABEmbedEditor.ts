@@ -80,10 +80,9 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     return null
   }
 
-  // 先测量原渲染尺寸，empty 前锁定，避免双击后宽高塌缩/跳动
+  // 高度按原文锁定，宽度跟父级 100%（勿锁 px，否则右侧留白）
   const rect = opts.containerEl.getBoundingClientRect()
   const cs = window.getComputedStyle(opts.containerEl)
-  const lockedWidth = Math.max(rect.width, 80)
   const lockedHeight = Math.max(rect.height, 48)
   const prevInline = {
     width: opts.containerEl.style.width,
@@ -95,13 +94,18 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     padding: opts.containerEl.style.padding,
     margin: opts.containerEl.style.margin,
   }
-  // 用 outline 提示编辑态，不挤占布局尺寸；保留原 padding/margin 观感
   opts.containerEl.style.boxSizing = "border-box"
-  opts.containerEl.style.width = `${lockedWidth}px`
-  opts.containerEl.style.minWidth = `${lockedWidth}px`
+  opts.containerEl.style.width = "100%"
+  opts.containerEl.style.minWidth = "0"
+  opts.containerEl.style.maxWidth = "100%"
   opts.containerEl.style.minHeight = `${lockedHeight}px`
   // 高度至少与原文一致，内容变长时可自然增高
   opts.containerEl.style.height = "auto"
+  // 覆盖父级「可读行宽 / 页边距」，否则 .cm-content 右侧会留白
+  opts.containerEl.style.setProperty("--file-line-width", "100%")
+  opts.containerEl.style.setProperty("--file-margins", "0px")
+  opts.containerEl.style.setProperty("--line-width", "100%")
+  opts.containerEl.style.setProperty("--content-max-width", "100%")
   if (!opts.containerEl.style.padding && cs.padding && cs.padding !== "0px") {
     opts.containerEl.style.padding = cs.padding
   }
@@ -112,7 +116,10 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   const editorEl = opts.containerEl.createDiv({ cls: ["cm-table-widget", "ab-embed-editor-inner"] })
   editorEl.style.minHeight = `${Math.max(lockedHeight - 8, 40)}px`
   editorEl.style.width = "100%"
+  editorEl.style.maxWidth = "100%"
   editorEl.style.boxSizing = "border-box"
+  editorEl.style.setProperty("--file-line-width", "100%")
+  editorEl.style.setProperty("--file-margins", "0px")
 
   let destroyed = false
   let cm: EditorView | null = null
@@ -186,16 +193,42 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
         EditorView.theme({
           "&": {
             height: "100%",
+            width: "100%",
+            maxWidth: "100%",
             fontSize: "inherit",
+          },
+          ".cm-gutters": {
+            display: "none",
           },
           ".cm-scroller": {
             fontFamily: "inherit",
             lineHeight: "inherit",
             overflow: "auto",
+            width: "100%",
+            padding: "0",
+          },
+          ".cm-sizer": {
+            maxWidth: "none",
+            width: "100%",
+            margin: "0",
+          },
+          ".cm-contentContainer": {
+            maxWidth: "none",
+            width: "100%",
+            margin: "0",
           },
           ".cm-content": {
             padding: "0",
+            maxWidth: "none",
+            width: "100%",
+            marginLeft: "0",
+            marginRight: "0",
             caretColor: "var(--text-normal)",
+            boxSizing: "border-box",
+          },
+          ".cm-line": {
+            maxWidth: "none",
+            paddingRight: "0",
           },
           "&.cm-focused": {
             outline: "none",
@@ -248,6 +281,33 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   controller.editMode = editorInstance
   editorInstance.set(opts.value || "")
 
+  // 直接清掉 CM 内联/计算样式里的可读行宽限制
+  const squashEmbedWidth = () => {
+    if (!cm) return
+    cm.scrollDOM.style.padding = "0"
+    cm.scrollDOM.style.paddingLeft = "0"
+    cm.scrollDOM.style.paddingRight = "0"
+    cm.contentDOM.style.maxWidth = "none"
+    cm.contentDOM.style.width = "100%"
+    cm.contentDOM.style.marginLeft = "0"
+    cm.contentDOM.style.marginRight = "0"
+    cm.dom.style.width = "100%"
+    cm.dom.style.maxWidth = "100%"
+    const sizer = cm.scrollDOM.querySelector(".cm-sizer") as HTMLElement | null
+    if (sizer) {
+      sizer.style.maxWidth = "none"
+      sizer.style.width = "100%"
+      sizer.style.margin = "0"
+    }
+    const contentContainer = cm.scrollDOM.querySelector(".cm-contentContainer") as HTMLElement | null
+    if (contentContainer) {
+      contentContainer.style.maxWidth = "none"
+      contentContainer.style.width = "100%"
+      contentContainer.style.margin = "0"
+    }
+  }
+  squashEmbedWidth()
+
   // 按双击坐标放置光标
   if (opts.clickCoords && cm) {
     try {
@@ -262,6 +322,7 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   }
 
   window.setTimeout(() => {
+    squashEmbedWidth()
     cm?.focus()
     // 再次请求布局，确保 scroller 填满锁定高度
     cm?.requestMeasure()

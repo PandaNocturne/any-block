@@ -155,14 +155,49 @@ html[data-theme=dark] #app {
   box-shadow: none;
   margin: 0 !important;
   overflow: hidden;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  --file-line-width: 100% !important;
+  --file-margins: 0px !important;
+  --line-width: 100% !important;
+  --content-max-width: 100% !important;
+}
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-sizer,
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-contentContainer,
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-content,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-sizer,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-contentContainer,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-content,
+.ab-replace > .ab-note tr.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-sizer,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-contentContainer,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-content, .ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note.ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note.ab-embed-editor .cm-sizer,
+.ab-replace > .ab-note.ab-embed-editor .cm-contentContainer,
+.ab-replace > .ab-note.ab-embed-editor .cm-content {
+  max-width: none !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box;
 }
 .ab-replace > .ab-note .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
 .ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .ab-embed-editor-inner,
 .ab-replace > .ab-note tr.ab-embed-editor .ab-embed-editor-inner, .ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner {
-  width: 100%;
   height: 100%;
   min-height: inherit;
-  box-sizing: border-box;
+  padding: 0;
 }
 .ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-editor,
 .ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-editor,
@@ -171,11 +206,31 @@ html[data-theme=dark] #app {
   height: 100%;
   font-size: inherit;
 }
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-gutters,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-gutters,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-gutters, .ab-replace > .ab-note.ab-embed-editor .cm-gutters {
+  display: none !important;
+}
 .ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-scroller,
 .ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-scroller,
 .ab-replace > .ab-note tr.ab-embed-editor .cm-scroller, .ab-replace > .ab-note.ab-embed-editor .cm-scroller {
   font-family: var(--font-text, inherit);
   line-height: var(--line-height-normal, 1.5);
+  padding: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-content,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-content,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-content, .ab-replace > .ab-note.ab-embed-editor .cm-content {
+  padding: 0 !important;
+  caret-color: var(--text-normal);
+}
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-line,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-line,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-line, .ab-replace > .ab-note.ab-embed-editor .cm-line {
+  max-width: none !important;
+  padding-right: 0 !important;
 }
 .ab-replace > .ab-button {
   box-sizing: border-box;
@@ -323,6 +378,10 @@ html[data-theme=dark] #app {
   color: var(--ab-tab-root-tx-color);
   border-top: none;
   padding: 10px 20px;
+}
+.ab-note .ab-tab-root .ab-tab-content .ab-tab-content-item {
+  width: 100%;
+  box-sizing: border-box;
 }
 .ab-note td > p:first-child, .ab-note th > p:first-child,
 .ab-note td > ul:first-child, .ab-note th > ul:first-child,
