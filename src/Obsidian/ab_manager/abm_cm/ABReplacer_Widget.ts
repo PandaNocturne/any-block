@@ -151,11 +151,11 @@ export class ABReplacer_Widget extends WidgetType {
 
     if (!this.global_editor) return this.div // 非有效的实时编辑环境
 
-    // Tabs：拖拽排序 / 添加 / 右键删除·重命名（写回源码）
-    const tabRoot = dom_note.querySelector(".ab-tab-root") as HTMLElement | null
-    if (tabRoot) {
+    const wireTabsChrome = () => {
+      const root = dom_note.querySelector(".ab-tab-root") as HTMLElement | null
+      if (!root || !this.global_editor) return
       enhanceABTabsChrome({
-        tabRoot,
+        tabRoot: root,
         onCommit: (mutate, activateIndex) => {
           if (!this.global_editor) return
           syncRangeFromDom()
@@ -172,6 +172,7 @@ export class ABReplacer_Widget extends WidgetType {
         },
       })
     }
+    wireTabsChrome()
 
     // 嵌入编辑：双击单个条目就地编辑；设置默认关闭
     // - tabs 标题（nav）：纯文本 input，只改标题
@@ -180,7 +181,7 @@ export class ABReplacer_Widget extends WidgetType {
     let embedEditing = false
     dom_note.addEventListener("dblclick", (e: MouseEvent) => {
       if (!isEmbedEditEnabled() || embedEditing) return
-      if ((e.target as HTMLElement)?.closest?.(".ab-button")) return
+      if ((e.target as HTMLElement)?.closest?.(".ab-button, .ab-tab-nav-add")) return
 
       const itemEl = (e.target as HTMLElement)?.closest?.(
         ".ab-items-item, .ab-tab-content-item, .ab-tab-nav-item"
@@ -208,6 +209,7 @@ export class ABReplacer_Widget extends WidgetType {
         ?? itemEl.getAttribute("data-ab-card-body")
         ?? ""
 
+      syncRangeFromDom()
       const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
       const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
       const fullSrc = this.global_editor.getRange(from, to)
@@ -222,17 +224,17 @@ export class ABReplacer_Widget extends WidgetType {
             embedEditing = false
             const newTitle = newTitleRaw.trim() || title
             if (newTitle === title) {
-              // 无改动：恢复截断显示
               itemEl.textContent = title.slice(0, 20)
               return
             }
+            const activateIdx = C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
             const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, body)
             if (newFull == null) {
               new Notice("写入失败：无法解析条目结构")
               itemEl.textContent = title.slice(0, 20)
               return
             }
-            C2ListProcess.setPendingTabActivateIndex(itemIndex)
+            C2ListProcess.setPendingTabActivateIndex(activateIdx)
             save(newFull, true)
           },
           onCancel: () => {
@@ -259,9 +261,13 @@ export class ABReplacer_Widget extends WidgetType {
         onSubmit: (newText: string) => {
           embedEditing = false
           const trimmed = newText.replace(/\n$/, "")
+          // 无改动：软恢复，避免整块重渲染（丢 chrome / 抢回标签页）
           if (trimmed === editValue.replace(/\n$/, "")) {
-            if (isTabContent) C2ListProcess.setPendingTabActivateIndex(itemIndex)
-            this.restoreEmbedItemView(dom_note)
+            if (isTabContent) {
+              this.softRestoreTabContent(itemEl, title, body, itemIndex)
+            } else {
+              this.restoreEmbedItemView(dom_note, wireTabsChrome)
+            }
             return
           }
           let newTitle = title
@@ -271,14 +277,21 @@ export class ABReplacer_Widget extends WidgetType {
             newTitle = (lines[0] ?? "").trim() || title
             newBody = lines.slice(1).join("\n")
           }
+          // 切页退出编辑时，保留用户点到的页
+          const activateIdx = isTabContent
+            ? C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
+            : itemIndex
           const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, newBody)
           if (newFull == null) {
             new Notice("写入失败：无法解析条目结构")
-            if (isTabContent) C2ListProcess.setPendingTabActivateIndex(itemIndex)
-            this.restoreEmbedItemView(dom_note)
+            if (isTabContent) {
+              this.softRestoreTabContent(itemEl, title, body, itemIndex)
+            } else {
+              this.restoreEmbedItemView(dom_note, wireTabsChrome)
+            }
             return
           }
-          if (isTabContent) C2ListProcess.setPendingTabActivateIndex(itemIndex)
+          if (isTabContent) C2ListProcess.setPendingTabActivateIndex(activateIdx)
           save(newFull, true)
         },
       })
@@ -463,8 +476,14 @@ export class ABReplacer_Widget extends WidgetType {
     return fullSrc.slice(0, idx2) + newContent + fullSrc.slice(idx2 + alt.length)
   }
 
-  /** 取消编辑时整体重渲染预览（兼容卡片/标签/时间线） */
-  private restoreEmbedItemView(dom_note: HTMLElement) {
+  /** 取消编辑时整体重渲染预览；可重新挂上 tabs chrome */
+  private restoreEmbedItemView(dom_note: HTMLElement, wireTabsChrome?: () => void) {
+    const hadTabs = !!dom_note.querySelector(".ab-tab-root")
+    if (hadTabs) {
+      C2ListProcess.setPendingTabActivateIndex(
+        C2ListProcess.getActiveTabIndex(dom_note, 0)
+      )
+    }
     dom_note.empty()
     dom_note.removeClass("ab-embed-editor")
     ABConvertManager.autoABConvert(
@@ -473,6 +492,22 @@ export class ABReplacer_Widget extends WidgetType {
       this.rangeSpec.content,
       this.rangeSpec.selector
     )
+    wireTabsChrome?.()
+  }
+
+  /** tabs 内容无改动退出：只恢复该面板，不整块重渲染 */
+  private softRestoreTabContent(
+    itemEl: HTMLElement,
+    title: string,
+    body: string,
+    itemIndex: number,
+  ) {
+    itemEl.empty()
+    itemEl.removeClass("ab-embed-editor")
+    C2ListProcess.stampEmbedItemAttrs(itemEl, itemIndex, title, body)
+    if (body.trim() !== "") {
+      ABConvertManager.getInstance().m_renderMarkdownFn(body, itemEl)
+    }
   }
 
   /**

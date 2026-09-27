@@ -364,6 +364,28 @@ export class C2ListProcess{
   }
 
   /**
+   * 读取当前激活标签下标（用于退出编辑时保留用户刚点的页，而非编辑中的页）
+   */
+  static getActiveTabIndex(scope: ParentNode | null | undefined, fallback = 0): number {
+    if (!scope) return fallback
+    const root = (scope instanceof Element && scope.classList.contains("ab-tab-root"))
+      ? scope
+      : scope.querySelector?.(".ab-tab-root")
+    if (!root) return fallback
+    const attr = root.getAttribute("data-ab-active-index")
+    if (attr != null && attr !== "") {
+      const n = parseInt(attr, 10)
+      if (!isNaN(n) && n >= 0) return n
+    }
+    const active = root.querySelector(".ab-tab-nav-item[is_activate='true']") as HTMLElement | null
+    if (active) {
+      const n = parseInt(active.getAttribute("data-ab-item-index") || "-1", 10)
+      if (n >= 0) return n
+    }
+    return fallback
+  }
+
+  /**
    * 两列列表数据转标签栏
    */
   static c2data2tab(
@@ -419,8 +441,13 @@ export class C2ListProcess{
       // 1. 二选一，常规绑定
       // ob选用
       if (ABCSetting.env.startsWith("obsidian")) {
-        lis[i].onclick = ()=>{
+        // mousedown 即切换：保证嵌入编辑失焦提交前 data-ab-active-index 已更新
+        lis[i].onmousedown = (ev: MouseEvent) => {
+          if (ev.button !== 0) return
           C2ListProcess.activateTabIndex(tab, i)
+        }
+        lis[i].onclick = (ev: MouseEvent) => {
+          ev.preventDefault()
         }
       }
       // 2. 二选一，嵌入内联onclick

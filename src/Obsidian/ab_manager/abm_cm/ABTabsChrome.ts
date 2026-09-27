@@ -16,14 +16,16 @@ export type ABTabsCommitFn = (
 export interface ABTabsChromeOptions {
   tabRoot: HTMLElement
   onCommit: ABTabsCommitFn
+  /** 强制重新绑定（软恢复后 DOM 可能仍带旧标记） */
+  force?: boolean
 }
 
 /**
- * 为 .ab-tab-root 挂上交互控件（幂等：重复调用会先清理旧标记）
+ * 为 .ab-tab-root 挂上交互控件（默认幂等；force 时可重绑）
  */
 export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
-  const { tabRoot, onCommit } = opts
-  if (tabRoot.getAttribute("data-ab-tabs-chrome") === "1") return
+  const { tabRoot, onCommit, force } = opts
+  if (!force && tabRoot.getAttribute("data-ab-tabs-chrome") === "1") return
   tabRoot.setAttribute("data-ab-tabs-chrome", "1")
 
   const nav = tabRoot.querySelector(":scope > .ab-tab-nav") as HTMLElement | null
@@ -53,6 +55,7 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
 
   // —— 每项：拖拽 + 右键菜单 ——
   for (const item of navItems()) {
+    if (force) item.removeAttribute("data-ab-tabs-wired")
     wireNavItem(item)
   }
 
