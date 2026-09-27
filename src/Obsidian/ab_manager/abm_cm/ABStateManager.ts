@@ -28,6 +28,7 @@ import { autoMdSelector, type MdSelectorRangeSpec} from "../../../CodeMirror2/AB
 import { ABReplacer_Widget } from "./ABReplacer_Widget"
 import { abConvertEvent } from "@/ABConverter/ABConvertEvent"
 import { ABCSetting } from "@/ABConverter/ABSetting";
+import { isForceRenderEnabled } from "./ABEmbedEditor"
 
 // 获取 - 模式
 enum Editor_mode{
@@ -354,6 +355,8 @@ export class ABStateManager {
     const cursorSpec = this.getCursorCh(tr)               // 光标位置 - 将来 (光标移动后的位置)
     const cursorSpec_last = this.getCursorCh()            // 光标位置 - 过去 (光标移动前的位置)
     let is_current_cursor_in = false // 当前光标是否在ab块区域内
+    const forceRender = isForceRenderEnabled()
+    let bounceCursorTo: number | null = null // 强制渲染时，误入块内则弹回块外
     for (let rangeSpec of list_rangeSpec){
       // (1) 判断光标与该范围项的关系
       let isCursorIn = false // 当前光标是否位于该ab区域内
@@ -371,7 +374,7 @@ export class ABStateManager {
 
       // (2) 给当前范围项创建一个装饰类，并添加到装饰集
 
-      // 先检查特殊光标 - ESC局部源码模式的虚拟光标
+      // 先检查特殊光标 - ESC/控件显式还原的局部源码模式 (cancelFlag)
       if (this.customData.cancelFlag.includes(rangeSpec.from_ch)) {
         // 光标在内
         if (isCursorIn) {
@@ -391,11 +394,28 @@ export class ABStateManager {
         }
       }
 
-      // 该ab区域显示为下划线装饰
-      if (isCursorIn) {
+      // 该ab区域显示为下划线装饰（光标进入 → 还原源码）
+      // 强制渲染开启时跳过，除非上方 cancelFlag 已显式允许
+      if (isCursorIn && !forceRender) {
         is_current_cursor_in = true
         const decoration = Decoration.mark({class: "ab-line-yellow"}) // TODO fix bug：当光标在局部频繁移动时或其他情况? 这里会被重复添加很多层带这个class的span嵌套
         list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
+      }
+      // 强制渲染：光标误入仍保持渲染，并准备将光标弹回块外
+      else if (isCursorIn && forceRender) {
+        const decoration = Decoration.replace({
+          widget: new ABReplacer_Widget(rangeSpec, this.editor, this.customData),
+        })
+        list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
+        if (bounceCursorTo == null) {
+          const c = cursorSpec.from
+          const mid = (rangeSpec.from_ch + rangeSpec.to_ch) / 2
+          if (c <= mid) {
+            bounceCursorTo = Math.max(0, rangeSpec.from_ch - 1)
+          } else {
+            bounceCursorTo = rangeSpec.to_ch + 1
+          }
+        }
       }
       // 该ab区域显示为渲染的ab块 - 变化
       else if (isCursonIn_last) {
@@ -420,6 +440,19 @@ export class ABStateManager {
       }
     }
     // #endregion
+
+    // 强制渲染：误入块内的光标弹回外侧（延迟到本轮 update 之后，避免事务重入）
+    if (bounceCursorTo != null) {
+      const to = bounceCursorTo
+      const editor = this.editor
+      const docLen = editor.getValue().length
+      const safeTo = Math.max(0, Math.min(to, docLen))
+      queueMicrotask(() => {
+        try {
+          editor.setCursor(editor.offsetToPos(safeTo))
+        } catch (_) { /* ignore */ }
+      })
+    }
 
     // #region 若没有变化项，可提前返回
     // 变化项包括: 装饰集变化, 光标进出范围集变化，编辑模式变化

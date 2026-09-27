@@ -33,6 +33,12 @@ export function isEmbedEditEnabled(): boolean {
   return !!(p?.settings?.embed_edit)
 }
 
+/** 是否强制渲染（禁止光标误入还原源码，仅控件可还原） */
+export function isForceRenderEnabled(): boolean {
+  const p = _pluginRef as any
+  return !!(p?.settings?.force_render)
+}
+
 /** 从 Obsidian 嵌入体系中取出内部 MarkdownEditor 构造函数 */
 export function getObsidianMarkdownEditorClass(app: App): any {
   // @ts-expect-error Obsidian 私有 API: embedRegistry

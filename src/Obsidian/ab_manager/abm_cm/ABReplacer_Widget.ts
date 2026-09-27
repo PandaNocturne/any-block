@@ -9,7 +9,7 @@ import {ABConvertManager} from "@/ABConverter/ABConvertManager"
 import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc_c2list"
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
-import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, restoreMainEditorContext, type ABEmbedEditorHandle } from './ABEmbedEditor'
+import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, restoreMainEditorContext, isForceRenderEnabled, type ABEmbedEditorHandle } from './ABEmbedEditor'
 import { enhanceABTabsChrome, hideABTabsMenu } from './ABTabsChrome'
 import type { C2ListPair } from "@/ABConverter/converter/abc_c2list"
 
@@ -539,6 +539,13 @@ export class ABReplacer_Widget extends WidgetType {
       e.stopPropagation()
       switch_more(false)
       syncRangeFromDom()
+      // 强制渲染：仅控件可还原源码 —— 先写入 cancelFlag，再移入光标
+      if (isForceRenderEnabled()) {
+        const from = this.rangeSpec.from_ch
+        if (!this.customData.cancelFlag.includes(from)) {
+          this.customData.cancelFlag.push(from)
+        }
+      }
       this.moveCursor()
     }
 
