@@ -174,19 +174,26 @@ export class ABReplacer_Widget extends WidgetType {
     }
     wireTabsChrome()
 
-    // 嵌入编辑：双击单个条目就地编辑；设置默认关闭
-    // - tabs 标题（nav）：纯文本 input，只改标题
-    // - tabs 内容 / 卡片 / 分栏：Markdown 嵌入编辑
-    // - timeline：不支持嵌入编辑
+    // 嵌入编辑：双击就地编辑；设置默认关闭
+    // - tabs / card / col 标题：纯文本
+    // - tabs / card / col 内容：Markdown（正文去掉列表缩进残留）
     let embedEditing = false
     dom_note.addEventListener("dblclick", (e: MouseEvent) => {
       if (!isEmbedEditEnabled() || embedEditing) return
       if ((e.target as HTMLElement)?.closest?.(".ab-button, .ab-tab-nav-add")) return
 
-      const itemEl = (e.target as HTMLElement)?.closest?.(
-        ".ab-items-item, .ab-tab-content-item, .ab-tab-nav-item"
+      const titlePart = (e.target as HTMLElement)?.closest?.(
+        ".ab-items-title, .ab-tab-nav-item"
       ) as HTMLElement | null
-      if (!itemEl || !dom_note.contains(itemEl)) return
+      const contentPart = (e.target as HTMLElement)?.closest?.(
+        ".ab-items-content, .ab-tab-content-item"
+      ) as HTMLElement | null
+      // 点在内容上时不要误判成标题
+      const hitTitle = titlePart && !contentPart
+      const hitContent = !!contentPart
+      if (!hitTitle && !hitContent) return
+      const hitEl = (hitTitle ? titlePart : contentPart) as HTMLElement
+      if (!dom_note.contains(hitEl)) return
 
       e.preventDefault()
       e.stopPropagation()
@@ -194,19 +201,20 @@ export class ABReplacer_Widget extends WidgetType {
       const plugin = getEmbedEditPlugin()
       if (!plugin || !this.global_editor) return
 
+      const attrHost = (hitEl.closest("[data-ab-item-index]") as HTMLElement | null) || hitEl
       const itemIndex = parseInt(
-        itemEl.getAttribute("data-ab-item-index")
-          || itemEl.getAttribute("data-ab-card-index")
+        attrHost.getAttribute("data-ab-item-index")
+          || attrHost.getAttribute("data-ab-card-index")
           || "-1",
         10
       )
       if (itemIndex < 0) return
 
-      const title = itemEl.getAttribute("data-ab-item-title")
-        ?? itemEl.getAttribute("data-ab-card-title")
+      const title = attrHost.getAttribute("data-ab-item-title")
+        ?? attrHost.getAttribute("data-ab-card-title")
         ?? ""
-      const body = itemEl.getAttribute("data-ab-item-body")
-        ?? itemEl.getAttribute("data-ab-card-body")
+      const body = attrHost.getAttribute("data-ab-item-body")
+        ?? attrHost.getAttribute("data-ab-card-body")
         ?? ""
 
       syncRangeFromDom()
@@ -214,84 +222,80 @@ export class ABReplacer_Widget extends WidgetType {
       const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
       const fullSrc = this.global_editor.getRange(from, to)
 
-      // —— tabs 标题：纯文本编辑，只写回 title ——
-      if (itemEl.classList.contains("ab-tab-nav-item")) {
+      // —— 标题：纯文本 ——
+      if (hitTitle) {
+        const isTabNav = hitEl.classList.contains("ab-tab-nav-item")
+        const isCardTitle = hitEl.classList.contains("ab-items-title")
         embedEditing = true
         openABTitleTextEditor({
-          containerEl: itemEl,
+          containerEl: hitEl,
           value: title,
           onSubmit: (newTitleRaw: string) => {
             embedEditing = false
             const newTitle = newTitleRaw.trim() || title
             if (newTitle === title) {
-              itemEl.textContent = title.slice(0, 20)
+              if (isTabNav) hitEl.textContent = title.slice(0, 20)
+              else if (isCardTitle) this.softRestoreMarkdownPart(hitEl, title)
               return
             }
-            const activateIdx = C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
             const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, body)
             if (newFull == null) {
               new Notice("写入失败：无法解析条目结构")
-              itemEl.textContent = title.slice(0, 20)
+              if (isTabNav) hitEl.textContent = title.slice(0, 20)
+              else if (isCardTitle) this.softRestoreMarkdownPart(hitEl, title)
               return
             }
-            C2ListProcess.setPendingTabActivateIndex(activateIdx)
+            if (isTabNav) {
+              C2ListProcess.setPendingTabActivateIndex(
+                C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
+              )
+            }
             save(newFull, true)
           },
           onCancel: () => {
             embedEditing = false
+            if (isCardTitle) this.softRestoreMarkdownPart(hitEl, title)
+            else if (isTabNav) hitEl.textContent = title.slice(0, 20)
           },
         })
         return
       }
 
-      // —— tabs 内容：只编辑 body；卡片/分栏：标题+正文 ——
-      const isTabContent = itemEl.classList.contains("ab-tab-content-item")
-      const editValue = isTabContent
-        ? body.replace(/\n$/, "")
-        : (body.trim() === "" ? title : `${title}\n${body.replace(/\n$/, "")}`)
+      // —— 内容：只编辑 body ——
+      const isTabContent = hitEl.classList.contains("ab-tab-content-item")
+      const isCardContent = hitEl.classList.contains("ab-items-content")
+      const editValue = C2ListProcess.normalizeC2BodyForEdit(body)
 
       embedEditing = true
       const handle = openABEmbedEditor({
         plugin,
         app: plugin.app,
-        containerEl: itemEl,
+        containerEl: hitEl,
         file: (plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file) ?? null,
         value: editValue,
         clickCoords: { x: e.clientX, y: e.clientY },
         onSubmit: (newText: string) => {
           embedEditing = false
           const trimmed = newText.replace(/\n$/, "")
-          // 无改动：软恢复，避免整块重渲染（丢 chrome / 抢回标签页）
           if (trimmed === editValue.replace(/\n$/, "")) {
-            if (isTabContent) {
-              this.softRestoreTabContent(itemEl, title, body, itemIndex)
-            } else {
-              this.restoreEmbedItemView(dom_note, wireTabsChrome)
-            }
+            if (isTabContent) this.softRestoreTabContent(hitEl, title, body, itemIndex)
+            else if (isCardContent) this.softRestoreMarkdownPart(hitEl, body)
+            else this.restoreEmbedItemView(dom_note, wireTabsChrome)
             return
           }
-          let newTitle = title
-          let newBody = trimmed
-          if (!isTabContent) {
-            const lines = trimmed.split("\n")
-            newTitle = (lines[0] ?? "").trim() || title
-            newBody = lines.slice(1).join("\n")
-          }
-          // 切页退出编辑时，保留用户点到的页
-          const activateIdx = isTabContent
-            ? C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
-            : itemIndex
-          const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, newBody)
+          const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, title, trimmed)
           if (newFull == null) {
             new Notice("写入失败：无法解析条目结构")
-            if (isTabContent) {
-              this.softRestoreTabContent(itemEl, title, body, itemIndex)
-            } else {
-              this.restoreEmbedItemView(dom_note, wireTabsChrome)
-            }
+            if (isTabContent) this.softRestoreTabContent(hitEl, title, body, itemIndex)
+            else if (isCardContent) this.softRestoreMarkdownPart(hitEl, body)
+            else this.restoreEmbedItemView(dom_note, wireTabsChrome)
             return
           }
-          if (isTabContent) C2ListProcess.setPendingTabActivateIndex(activateIdx)
+          if (isTabContent) {
+            C2ListProcess.setPendingTabActivateIndex(
+              C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
+            )
+          }
           save(newFull, true)
         },
       })
@@ -507,6 +511,16 @@ export class ABReplacer_Widget extends WidgetType {
     C2ListProcess.stampEmbedItemAttrs(itemEl, itemIndex, title, body)
     if (body.trim() !== "") {
       ABConvertManager.getInstance().m_renderMarkdownFn(body, itemEl)
+    }
+  }
+
+  /** card/col 标题或内容无改动退出：按 md 重渲染该局部 */
+  private softRestoreMarkdownPart(el: HTMLElement, md: string) {
+    el.empty()
+    el.removeClass("ab-embed-editor")
+    el.removeClass("ab-embed-title-editor")
+    if (md.trim() !== "") {
+      ABConvertManager.getInstance().m_renderMarkdownFn(md, el)
     }
   }
 

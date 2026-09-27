@@ -229,11 +229,19 @@ export class C2ListProcess{
         })
       } else { // b2. 子内容
         if (current_content.trim()=="") { // 第一行的子内容前缀提取
-          if (match_list && match_list[1]) current_content_prefix = match_list[1] // 有 `- `，则为 `- ` 前的字符数
-          else current_content_prefix = "  " // (TODO风险) 无 `- `，则设前缀字符数为2 (用户可能用tab的1和四空格的4，但少消除2个一般不会影响，主要避免前缀4空格自动转化为缩进代码块)
+          if (match_list && match_list[1]) {
+            // 嵌套列表：`- ` 前的缩进
+            current_content_prefix = match_list[1]
+          } else {
+            // 普通缩进正文：取本行行首空白（勿写死 2 空格，否则 4 空格源会残留 2 空格）
+            const lead = line.match(/^[ \t]*/)
+            current_content_prefix = (lead && lead[0].length > 0)
+              ? lead[0]
+              : C2ListProcess.getListIndent()
+          }
         }
         if (line.startsWith("\t")) line = line.substring(1);
-        else if (line.startsWith(current_content_prefix)) { // 子内容前缀去除
+        else if (current_content_prefix && line.startsWith(current_content_prefix)) { // 子内容前缀去除
           line = line.substring(current_content_prefix.length);
         }
         current_content += line+"\n" // 子内容拼接
@@ -603,6 +611,24 @@ export class C2ListProcess{
     }
     if (cur) pairs.push(cur)
     return pairs
+  }
+
+  /**
+   * 嵌入编辑用：去掉正文各行共有的前导缩进（渲染时不可见，编辑时会露出来）
+   */
+  static normalizeC2BodyForEdit(body: string): string {
+    const text = body.replace(/\n$/, "")
+    if (!text) return ""
+    const lines = text.split("\n")
+    let minIndent = Infinity
+    for (const line of lines) {
+      if (line.trim() === "") continue
+      const m = line.match(/^[ \t]*/)
+      const n = m ? m[0].length : 0
+      if (n < minIndent) minIndent = n
+    }
+    if (!isFinite(minIndent) || minIndent <= 0) return text
+    return lines.map((line) => (line.trim() === "" ? line : line.slice(minIndent))).join("\n")
   }
 
   /** 条目对还原为 c2 流 */
