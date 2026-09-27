@@ -237,7 +237,8 @@ export class ABStateManager {
     let editor_mode: Editor_mode = this.getEditorMode()
     let decoration_mode:ConfDecoration
     if(editor_mode==Editor_mode.SOURCE) {
-      decoration_mode = this.plugin_this.settings.decoration_source
+      // 源码模式始终不渲染（强制渲染等开关仅作用于实时预览）
+      decoration_mode = ConfDecoration.none
     }
     else if(editor_mode==Editor_mode.SOURCE_LIVE) {
       decoration_mode = this.plugin_this.settings.decoration_live
@@ -342,6 +343,14 @@ export class ABStateManager {
       // 如果将tr更新的新旧对象错误混用，会出现这种问题 (之前修复了光标位置延时问题后，触发了这个问题)
       console.warn('decorationSet map error, maybe paste ab at end', e)
     }
+    // 控件还原源码的 cancelFlag 也要跟随文档变更映射，否则强制渲染下会失配、仍显示渲染块
+    if (this.customData.cancelFlag.length && tr.changes && !tr.changes.empty) {
+      try {
+        this.customData.cancelFlag = this.customData.cancelFlag.map((pos) => {
+          try { return tr.changes.mapPos(pos) } catch (_) { return pos }
+        })
+      } catch (_) { /* ignore */ }
+    }
     // #endregion
 
     // #region 得到新范围集 (更新后)
@@ -358,6 +367,16 @@ export class ABStateManager {
     const forceRender = isForceRenderEnabled()
     const matchHighlight = isMatchHighlightEnabled()
     let bounceCursorTo: number | null = null // 强制渲染时，误入块内则弹回块外
+
+    const isCancelDemote = (from: number, to: number) =>
+      this.customData.cancelFlag.some((flag) => flag >= from && flag <= to)
+
+    const clearCancelInRange = (from: number, to: number) => {
+      this.customData.cancelFlag = this.customData.cancelFlag.filter(
+        (flag) => !(flag >= from && flag <= to)
+      )
+    }
+
     for (let rangeSpec of list_rangeSpec){
       // (1) 判断光标与该范围项的关系
       let isCursorIn = false // 当前光标是否位于该ab区域内
@@ -376,9 +395,10 @@ export class ABStateManager {
       // (2) 给当前范围项创建一个装饰类，并添加到装饰集
 
       // 先检查特殊光标 - ESC/控件显式还原的局部源码模式 (cancelFlag)
-      if (this.customData.cancelFlag.includes(rangeSpec.from_ch)) {
-        // 光标在内
+      if (isCancelDemote(rangeSpec.from_ch, rangeSpec.to_ch)) {
+        // 光标在内 → 显示源码（强制渲染下也允许）
         if (isCursorIn) {
+          is_current_cursor_in = true
           const markOpts: { class?: string, inclusive: boolean } = { inclusive: true }
           if (matchHighlight) markOpts.class = "ab-line-yellow"
           const decoration = Decoration.mark(markOpts)
@@ -387,9 +407,7 @@ export class ABStateManager {
         }
         // 光标在外。删除对应的ESC区域
         else {
-          if (this.customData.cancelFlag.includes(rangeSpec.from_ch)) {
-            this.customData.cancelFlag = this.customData.cancelFlag.filter(item => item !== rangeSpec.from_ch)
-          }
+          clearCancelInRange(rangeSpec.from_ch, rangeSpec.to_ch)
         }
       }
 

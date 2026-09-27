@@ -558,8 +558,12 @@ export class ABReplacer_Widget extends WidgetType {
         if (!this.customData.cancelFlag.includes(from)) {
           this.customData.cancelFlag.push(from)
         }
+        this.customData.updateMode = from
+        // soft：只移入光标，避免 OF 改写导致 cancelFlag 与 from_ch 失配
+        this.moveCursor(0, true)
+      } else {
+        this.moveCursor()
       }
-      this.moveCursor()
     }
 
     // 菜单按钮3 - 复制
@@ -822,8 +826,9 @@ export class ABReplacer_Widget extends WidgetType {
    * @detail
    * 当line_offset为0时，相当于将光标移到AB块的第一行
    * 否则则相当于向上/向下偏移
+   * @param soft 仅 setCursor，不做 OF 改写（强制渲染下控件还原源码时用，避免 cancelFlag 失配）
    */
-  private moveCursor(line_offset:number = 0): void{
+  private moveCursor(line_offset:number = 0, soft: boolean = false): void{
     /** @warning 注意这里千万不能用 toDOM 方法给的 view 参数
      * const editor: Editor = view.editor
      * 否则editor是undefined
@@ -840,8 +845,10 @@ export class ABReplacer_Widget extends WidgetType {
         // 如果是>=0，则表示将光标移动到AB块所在范围，那么需要重新渲染State
         else {
           editor.setCursor(pos)
-          editor.replaceRange("OF", pos) // 这里相当于将光标移出再内移，间接使之重新渲染
-          editor.replaceRange("", pos, {line:pos.line, ch:pos.ch+2})
+          if (!soft) {
+            editor.replaceRange("OF", pos) // 这里相当于将光标移出再内移，间接使之重新渲染
+            editor.replaceRange("", pos, {line:pos.line, ch:pos.ch+2})
+          }
         }
       }
     }
