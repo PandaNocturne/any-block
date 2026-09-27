@@ -80,7 +80,7 @@ export default {
   // General
   'General': '其他',
   'Reading auto refresh': '是否自动刷新',
-  'Reading auto refresh2': '阅读模式下内容变更时是否自动强制刷新整页。默认关闭，可避免界面反复刷新；若从实时模式切换回阅读模式后部分 AnyBlock 未更新，可临时开启或使用状态栏「刷新视图」',
+  'Reading auto refresh2': '阅读模式下内容变更时是否自动强制刷新整页，避免未改动的 AnyBlock 效果丢失。默认开启；若遇自引用嵌入导致反复刷新可关闭，或使用状态栏「刷新视图」手动刷新',
   'Submit': '提交',
   'Edit': '编辑',
   'Refresh': '刷新',

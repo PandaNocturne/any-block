@@ -80,7 +80,7 @@ By adopting a dual-licensing mechanism, a certain period of default free license
   // General
   'General': 'General',
   'Reading auto refresh': 'Auto refresh (Reading mode)',
-  'Reading auto refresh2': 'Force rebuild the reading view when content changes. Off by default to avoid endless refreshes. If some AnyBlocks are stale after switching from live preview, enable this temporarily or use the status-bar rebuild command.',
+  'Reading auto refresh2': 'Force rebuild the reading view when content changes so unchanged AnyBlocks are not lost. On by default; a cooldown guards against endless refresh with self-embeds. Turn off if needed, or use the status-bar rebuild command.',
   'Submit': 'Submit',
   'Edit': 'Edit',
   'Refresh': 'Refresh',

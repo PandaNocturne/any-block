@@ -131,7 +131,16 @@ export class ABSelector_PostHtml{
           if (this.settings.is_debug) console.log(` !! Check subPage, [${basename}] quote ![[${ctx.sourcePath}]] in no readmode`)
           is_subContent = true; return
         }
-        // 判断方式四：极难去判断阅读模式下的自引用标题/块的情况。TODO fix bug: 这种情况会导致阅读模式的无限刷新
+        // 判断方式四：同路径但全文内容与当前视图不一致 → 多为自引用块/标题嵌入 (content_all 仅为片段)
+        // 可在 parentElement 仍为 null 的首轮渲染时补上 is_subContent，避免污染 cache / 触发无限 rebuild (#171)
+        if (!is_subContent && path && path === ctx.sourcePath) {
+          const viewData = view?.data
+          if (typeof viewData === "string" && viewData.length > 0 && viewData !== mdSrc.content_all) {
+            if (this.settings.is_debug) console.log(` !! Check SubPage: [${basename}] self-embed fragment (content_all != view.data)`)
+            is_subContent = true; return
+          }
+        }
+        // 判断方式五：极难去判断阅读模式下的自引用标题/块的情况。TODO fix bug: 这种情况会导致阅读模式的无限刷新
       })();
       // 缓存判断
       if (!is_subContent) { // 如果是子内容，则不要去更新缓存的内容
@@ -143,16 +152,16 @@ export class ABSelector_PostHtml{
             break;
           }
         }
-        // b1. 无缓存 -> 有修改
+        // b1. 无缓存 -> 首次进入，不视为“内容变更”，避免无意义的 rebuildView
         if (!cache_item) {
           if (this.settings.is_debug) console.log(` !! Check cache, noCache -> hasCache, null -> ${mdSrc.content_all.length}`)
           cache_item = { name: ctx.sourcePath, content: mdSrc.content_all }
           cache_map.push(cache_item)
-          is_newContent = true
+          is_newContent = false
         }
         // b2. 有缓存
         else {
-          // b2.1. 内容变 -> 有修改
+          // b2.1. 内容变 -> 有修改 (笔记更新 / 从实时模式改完再回阅读模式)
           if (cache_item.content != mdSrc.content_all) {
             if (this.settings.is_debug) console.log(` !! Check cache, hasCache -> ChangeCache, ${cache_item.content.length} -> ${mdSrc.content_all.length}`)
             cache_item.content = mdSrc.content_all
@@ -167,7 +176,8 @@ export class ABSelector_PostHtml{
       // #endregion
 
       // 若内容修改了或处于开头位置，清空页缓存 (光标缓存)
-      if (is_newContent || is_start) {
+      // 嵌入子页面不要清父页面的 selected 状态，否则父页跨块 AB 组装会被打断
+      if (!is_subContent && (is_newContent || is_start)) {
         selected_els = []
         selected_mdSrc = null
       }
@@ -183,32 +193,24 @@ export class ABSelector_PostHtml{
       // 如果没有这个，如果从阅读模式切换回实时模式，并只修改一部分内容再切换回阅读模式，那么 `ABPosthtmlManager.processor, called by 'ReadMode'` 只会识别到那些有改动的块，其他不再走这里
       // 本来想用旧版的 `is_onlyPart`，但不准的。因为开头片段被修改过，则判断不了，然后想象还是用回 `is_newContent` 作为判断依据
       // TODO 这里存在改进的空间，如果这里触发了实际上会渲染 n+m 次，n是受影响的div，m是全文的div。前者这里可以弄个flag来消除掉，没必要进行
-      // 默认关闭：部分场景（如自引用嵌入）会导致阅读模式无限 rebuildView；需要时可在设置中开启
+      // 默认开启：笔记内容更新后否则未改动的 AB 块效果会丢失；冷却 + is_subContent 用于抑制自引用嵌入的无限刷新 (#171)
       if (this.settings.reading_auto_refresh && !is_subContent && is_newContent) {
         // 性能优化：如果不包含ab块，那就不强制刷新，以免影响正常页面
         if (cache_item && (
           /((\s|>\s|-\s|\*\s|\+\s)*)(%%)?(\[((?!toc)(?!TOC)[0-9a-zA-Z\u4e00-\u9fa5].*)\]):?(%%)?\s*\n/.test(cache_item.content) ||
           /((\s|>\s|-\s|\*\s|\+\s)*)(:::)\s?(\S*)\n/.test(cache_item.content)
         )) {
-          const leaf = this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf; if (!leaf) { return }
-          // const el = leaf.containerEl.querySelector(".markdown-source-view") as HTMLElement;
-          // if (!el) {
-          //   if (this.settings.is_debug) console.log("找不到实时模式div，不强制刷新")
-          //   return
-          // }
-          // if (el.style.display!="none") { // 在Ctrl+鼠标悬浮方式显示的内容中，这里会被触发。但不应该强制刷新，否则页面定位会被重置          
-          //   if (this.settings.is_debug) console.log("处于实时模式，不强制刷新")
-          //   return
-          // }
-          // @ts-expect-error WorkspaceLeaf have not rebuildView
-          leaf.rebuildView()
-          if (this.settings.is_debug) console.log(" !! RebuildView: executed")
-          return
-        } else {
-          // if (this.settings.is_debug) console.log(" but no anyblock content, no rebuildView", cache_item, 
-          //   /((\s|>\s|-\s|\*\s|\+\s)*)(%%)?(\[((?!toc)(?!TOC)[0-9a-zA-Z\u4e00-\u9fa5].*)\]):?(%%)?\s*\n/.test((cache_item as any).content),
-          //   /((\s|>\s|-\s|\*\s|\+\s)*)(:::)\s?(\S*)\n/.test((cache_item as any).content)
-          // )
+          const now = Date.now()
+          if (now < rebuild_suppress_until) {
+            if (this.settings.is_debug) console.log(" !! RebuildView: skipped (cooldown)")
+          } else {
+            const leaf = this.app.workspace.getActiveViewOfType(MarkdownView)?.leaf; if (!leaf) { return }
+            rebuild_suppress_until = now + REBUILD_COOLDOWN_MS
+            // @ts-expect-error WorkspaceLeaf have not rebuildView
+            leaf.rebuildView()
+            if (this.settings.is_debug) console.log(" !! RebuildView: executed")
+            return
+          }
         }
       }
 
@@ -378,6 +380,9 @@ function findABBlock_end() {
 let cache_map: {name: string, content:string}[] = [];   // 新的缓存系统。之前的有bug (多个阅读视图在同一Leaf时)，弃用
 let selected_els: HTMLElement[] = [];                   // 正在选择中的元素 (如果未在AB块内，还未开始选择，则为空)
 let selected_mdSrc: HTMLSelectorRangeSpec|null = null;  // 已经选中的范围   (如果未在AB块内，还未开始选择，则为空)
+/** rebuildView 冷却：自引用嵌入等场景下防止无限刷新 (#171) */
+let rebuild_suppress_until = 0
+const REBUILD_COOLDOWN_MS = 2000
 /**
  * 找ab块 - 跨切割块版 (阅读模式下按片触发)
  * 
