@@ -269,3 +269,119 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
 
   return { destroy, getValue }
 }
+
+export interface ABTitleTextEditorOptions {
+  /** 通常为 .ab-tab-nav-item 按钮 */
+  containerEl: HTMLElement
+  /** 完整标题文本（非截断显示） */
+  value: string
+  onSubmit: (value: string) => void
+  onCancel?: () => void
+}
+
+/**
+ * 标题纯文本就地编辑（contenteditable，非 MarkdownEditor）
+ * 避免在 button 内嵌 input（非法 HTML / 点击冒泡问题）
+ */
+export function openABTitleTextEditor(opts: ABTitleTextEditorOptions): ABEmbedEditorHandle {
+  const el = opts.containerEl
+  const prevText = el.textContent ?? ""
+  const prevEditable = el.getAttribute("contenteditable")
+  const prevOnClick = el.onclick
+  el.addClass("ab-embed-title-editor")
+  el.textContent = opts.value
+  el.setAttribute("contenteditable", "plaintext-only")
+  // 部分浏览器不支持 plaintext-only，回退
+  if (el.contentEditable !== "plaintext-only" && el.contentEditable !== "true") {
+    el.contentEditable = "true"
+  }
+  el.style.cursor = "text"
+  // 编辑期间禁止 tab 切换
+  el.onclick = (ev) => {
+    ev.stopPropagation()
+    ev.preventDefault()
+  }
+
+  let destroyed = false
+
+  const cleanupStyle = () => {
+    el.removeClass("ab-embed-title-editor")
+    el.style.cursor = ""
+    el.onclick = prevOnClick
+    if (prevEditable == null) el.removeAttribute("contenteditable")
+    else el.setAttribute("contenteditable", prevEditable)
+  }
+
+  const destroy = () => {
+    if (destroyed) return
+    destroyed = true
+    cleanupStyle()
+  }
+
+  const getText = () => (el.textContent ?? "").replace(/\u00a0/g, " ")
+
+  const submit = () => {
+    if (destroyed) return
+    const text = getText()
+    destroy()
+    opts.onSubmit(text)
+  }
+
+  const cancel = () => {
+    if (destroyed) return
+    destroy()
+    el.textContent = prevText
+    opts.onCancel?.()
+  }
+
+  const stop = (e: Event) => {
+    e.stopPropagation()
+  }
+  el.addEventListener("mousedown", stop)
+  el.addEventListener("click", stop)
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      e.stopPropagation()
+      submit()
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      e.stopPropagation()
+      cancel()
+    }
+  }
+  el.addEventListener("keydown", onKeyDown)
+
+  const onBlur = () => {
+    window.setTimeout(() => {
+      if (destroyed) return
+      if (el.contains(document.activeElement) || document.activeElement === el) return
+      submit()
+    }, 80)
+  }
+  el.addEventListener("blur", onBlur)
+
+  // 选中全文
+  window.setTimeout(() => {
+    el.focus()
+    try {
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    } catch (_) { /* ignore */ }
+  }, 0)
+
+  return {
+    destroy: () => {
+      el.removeEventListener("mousedown", stop)
+      el.removeEventListener("click", stop)
+      el.removeEventListener("keydown", onKeyDown)
+      el.removeEventListener("blur", onBlur)
+      cancel()
+    },
+    getValue: () => (destroyed ? opts.value : getText()),
+  }
+}

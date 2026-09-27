@@ -9,7 +9,7 @@ import {ABConvertManager} from "@/ABConverter/ABConvertManager"
 import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc_c2list"
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
-import { isEmbedEditEnabled, openABEmbedEditor, getEmbedEditPlugin } from './ABEmbedEditor'
+import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin } from './ABEmbedEditor'
 
 export class ABReplacer_Widget extends WidgetType {
   rangeSpec: MdSelectorRangeSpec
@@ -133,14 +133,17 @@ export class ABReplacer_Widget extends WidgetType {
 
     if (!this.global_editor) return this.div // 非有效的实时编辑环境
 
-    // 嵌入编辑：双击单个条目（卡片 / 分栏项 / 标签页 / 时间线行）就地编辑；设置默认关闭
+    // 嵌入编辑：双击单个条目就地编辑；设置默认关闭
+    // - tabs 标题（nav）：纯文本 input，只改标题
+    // - tabs 内容 / 卡片 / 分栏：Markdown 嵌入编辑
+    // - timeline：不支持嵌入编辑
     let embedEditing = false
     dom_note.addEventListener("dblclick", (e: MouseEvent) => {
       if (!isEmbedEditEnabled() || embedEditing) return
       if ((e.target as HTMLElement)?.closest?.(".ab-button")) return
 
       const itemEl = (e.target as HTMLElement)?.closest?.(
-        ".ab-items-item, .ab-tab-content-item, .ab-tab-nav-item, tr[data-ab-item-index]"
+        ".ab-items-item, .ab-tab-content-item, .ab-tab-nav-item"
       ) as HTMLElement | null
       if (!itemEl || !dom_note.contains(itemEl)) return
 
@@ -164,28 +167,51 @@ export class ABReplacer_Widget extends WidgetType {
       const body = itemEl.getAttribute("data-ab-item-body")
         ?? itemEl.getAttribute("data-ab-card-body")
         ?? ""
-      // 编辑缓冲：首行标题，其余为正文
-      const editValue = body.trim() === "" ? title : `${title}\n${body.replace(/\n$/, "")}`
-
-      // 标签页：优先在内容面板上编辑（避免按钮上打开编辑器体验差）
-      let editContainer = itemEl
-      if (itemEl.classList.contains("ab-tab-nav-item")) {
-        const tabRoot = itemEl.closest(".ab-tab-root")
-        const contentItem = tabRoot?.querySelector(
-          `.ab-tab-content-item[data-ab-item-index="${itemIndex}"]`
-        ) as HTMLElement | null
-        if (contentItem) editContainer = contentItem
-      }
 
       const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
       const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
       const fullSrc = this.global_editor.getRange(from, to)
 
+      // —— tabs 标题：纯文本编辑，只写回 title ——
+      if (itemEl.classList.contains("ab-tab-nav-item")) {
+        embedEditing = true
+        openABTitleTextEditor({
+          containerEl: itemEl,
+          value: title,
+          onSubmit: (newTitleRaw: string) => {
+            embedEditing = false
+            const newTitle = newTitleRaw.trim() || title
+            if (newTitle === title) {
+              // 无改动：恢复截断显示
+              itemEl.textContent = title.slice(0, 20)
+              return
+            }
+            const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, body)
+            if (newFull == null) {
+              new Notice("写入失败：无法解析条目结构")
+              itemEl.textContent = title.slice(0, 20)
+              return
+            }
+            save(newFull, true)
+          },
+          onCancel: () => {
+            embedEditing = false
+          },
+        })
+        return
+      }
+
+      // —— tabs 内容：只编辑 body；卡片/分栏：标题+正文 ——
+      const isTabContent = itemEl.classList.contains("ab-tab-content-item")
+      const editValue = isTabContent
+        ? body.replace(/\n$/, "")
+        : (body.trim() === "" ? title : `${title}\n${body.replace(/\n$/, "")}`)
+
       embedEditing = true
       const handle = openABEmbedEditor({
         plugin,
         app: plugin.app,
-        containerEl: editContainer,
+        containerEl: itemEl,
         file: (plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file) ?? null,
         value: editValue,
         clickCoords: { x: e.clientX, y: e.clientY },
@@ -196,9 +222,13 @@ export class ABReplacer_Widget extends WidgetType {
             this.restoreEmbedItemView(dom_note)
             return
           }
-          const lines = trimmed.split("\n")
-          const newTitle = (lines[0] ?? "").trim() || title
-          const newBody = lines.slice(1).join("\n")
+          let newTitle = title
+          let newBody = trimmed
+          if (!isTabContent) {
+            const lines = trimmed.split("\n")
+            newTitle = (lines[0] ?? "").trim() || title
+            newBody = lines.slice(1).join("\n")
+          }
           const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, newBody)
           if (newFull == null) {
             new Notice("写入失败：无法解析条目结构")

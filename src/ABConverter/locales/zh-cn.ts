@@ -84,7 +84,7 @@ export default {
   'Edit mode render': '编辑模式渲染',
   'Edit mode render2': '开启后在「实时预览」中渲染 AnyBlock；关闭后实时预览也不渲染。源码模式始终不渲染（仅显示原文）',
   'Embed edit': '嵌入编辑',
-  'Embed edit2': '开启后，在实时预览中双击单个渲染条目（卡片/分栏/标签页/时间线）可就地编辑。首行=标题，其余=正文。默认关闭。Esc / Ctrl+Enter / 失焦提交',
+  'Embed edit2': '开启后，在实时预览中双击单个渲染条目（卡片/分栏/标签页）可就地编辑。标签页：标题为纯文本、内容为 Markdown；卡片/分栏：首行=标题，其余=正文。默认关闭。Esc / Ctrl+Enter / 失焦提交',
   'Submit': '提交',
   'Edit': '编辑',
   'Refresh': '刷新',
