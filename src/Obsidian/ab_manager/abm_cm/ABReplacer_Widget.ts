@@ -184,41 +184,33 @@ export class ABReplacer_Widget extends WidgetType {
     // 嵌入编辑：双击就地编辑；设置默认关闭
     // - tabs / card / col 标题：纯文本
     // - tabs / card / col 内容：Markdown（正文去掉列表缩进残留）
+    //
+    // 注意：为阻止光标落入块源码，mousedown 必须 preventDefault；
+    // 但 preventDefault(mousedown) 会让浏览器不再派发原生 dblclick，
+    // 因此这里用两次 mousedown 间隔自行识别双击。
     let embedEditing = false
+    let lastEmbedTap: { el: HTMLElement; at: number } | null = null
 
-    // 捕获阶段拦住指针事件，防止 Obsidian/CM 把点击当成进入块源码
-    const stopEmbedPointerToCM = (e: Event) => {
-      const t = e.target as HTMLElement | null
-      if (!t?.closest) return
-      if (t.closest(".ab-items-title, .ab-items-content, .ab-tab-nav-item, .ab-tab-content-item, .ab-embed-title-editor, .ab-embed-editor")) {
-        e.stopPropagation()
-      }
-    }
-    for (const type of ["mousedown", "pointerdown", "click"] as const) {
-      dom_note.addEventListener(type, stopEmbedPointerToCM, true)
+    const isEmbedHitTarget = (t: HTMLElement | null) => {
+      if (!t?.closest) return false
+      return !!t.closest(
+        ".ab-items-title, .ab-items-content, .ab-items-item, .ab-tab-nav-item, .ab-tab-content-item, .ab-embed-title-editor, .ab-embed-editor, .ab-embed-title-input"
+      )
     }
 
-    dom_note.addEventListener("dblclick", (e: MouseEvent) => {
-      if (!isEmbedEditEnabled() || embedEditing) return
-      if ((e.target as HTMLElement)?.closest?.(".ab-button, .ab-tab-nav-add")) return
-
-      const titlePart = (e.target as HTMLElement)?.closest?.(
-        ".ab-items-title, .ab-tab-nav-item"
-      ) as HTMLElement | null
-      const contentPart = (e.target as HTMLElement)?.closest?.(
-        ".ab-items-content, .ab-tab-content-item"
-      ) as HTMLElement | null
-      // 点在内容上时不要误判成标题
-      const hitTitle = titlePart && !contentPart
+    const resolveEmbedHit = (target: HTMLElement) => {
+      const titlePart = target.closest(".ab-items-title, .ab-tab-nav-item") as HTMLElement | null
+      const contentPart = target.closest(".ab-items-content, .ab-tab-content-item") as HTMLElement | null
+      const hitTitle = !!(titlePart && !contentPart)
       const hitContent = !!contentPart
-      if (!hitTitle && !hitContent) return
+      if (!hitTitle && !hitContent) return null
       const hitEl = (hitTitle ? titlePart : contentPart) as HTMLElement
-      if (!dom_note.contains(hitEl)) return
+      if (!dom_note.contains(hitEl)) return null
+      return { hitEl, hitTitle, hitContent }
+    }
 
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation?.()
-
+    const startEmbedEdit = (hitEl: HTMLElement, hitTitle: boolean, clientX: number, clientY: number) => {
+      if (!isEmbedEditEnabled() || embedEditing) return
       const plugin = getEmbedEditPlugin()
       if (!plugin || !this.global_editor) return
 
@@ -243,7 +235,6 @@ export class ABReplacer_Widget extends WidgetType {
       const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
       const fullSrc = this.global_editor.getRange(from, to)
 
-      // —— 标题：纯文本 ——
       if (hitTitle) {
         const isTabNav = hitEl.classList.contains("ab-tab-nav-item")
         const isCardTitle = hitEl.classList.contains("ab-items-title")
@@ -282,7 +273,6 @@ export class ABReplacer_Widget extends WidgetType {
         return
       }
 
-      // —— 内容：只编辑 body ——
       const isTabContent = hitEl.classList.contains("ab-tab-content-item")
       const isCardContent = hitEl.classList.contains("ab-items-content")
       const editValue = C2ListProcess.normalizeC2BodyForEdit(body)
@@ -294,7 +284,7 @@ export class ABReplacer_Widget extends WidgetType {
         containerEl: hitEl,
         file: (plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file) ?? null,
         value: editValue,
-        clickCoords: { x: e.clientX, y: e.clientY },
+        clickCoords: { x: clientX, y: clientY },
         onSubmit: (newText: string) => {
           embedEditing = false
           const trimmed = newText.replace(/\n$/, "")
@@ -323,7 +313,55 @@ export class ABReplacer_Widget extends WidgetType {
       if (!handle) {
         embedEditing = false
       }
-    })
+    }
+
+    // 捕获：挡住 CM 落点；并在此识别双击（因 preventDefault 后无原生 dblclick）
+    const onEmbedPointerDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null
+      if (!isEmbedHitTarget(t)) return
+      if (t?.closest?.(".ab-button, .ab-tab-nav-add")) return
+      // 已在编辑中的 input/editor 不拦截默认（否则无法聚焦输入）
+      if (t?.closest?.(".ab-embed-title-input, .ab-embed-editor, .ab-embed-title-editor")) {
+        e.stopPropagation()
+        return
+      }
+
+      e.stopPropagation()
+      e.preventDefault()
+
+      if (!isEmbedEditEnabled() || embedEditing) return
+      if (e.button !== 0) return
+
+      const hit = resolveEmbedHit(t!)
+      if (!hit) {
+        lastEmbedTap = null
+        return
+      }
+
+      const now = Date.now()
+      const isDouble =
+        lastEmbedTap
+        && lastEmbedTap.el === hit.hitEl
+        && now - lastEmbedTap.at < 400
+
+      if (isDouble) {
+        lastEmbedTap = null
+        startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
+      } else {
+        lastEmbedTap = { el: hit.hitEl, at: now }
+      }
+    }
+
+    dom_note.addEventListener("mousedown", onEmbedPointerDown, true)
+
+    // 其余冒泡到 CM 的指针事件也拦住
+    const stopBubbleToCM = (e: Event) => {
+      if (!isEmbedHitTarget(e.target as HTMLElement)) return
+      e.stopPropagation()
+    }
+    for (const type of ["mouseup", "click", "dblclick"] as const) {
+      dom_note.addEventListener(type, stopBubbleToCM, true)
+    }
 
     // 菜单按钮1 - 编辑
     const btn_edit: HTMLDivElement = this.div.createEl("div", {
