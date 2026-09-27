@@ -59,15 +59,21 @@ export interface ABEmbedEditorOptions {
   value: string
   /** 双击坐标，用于定位光标 */
   clickCoords?: { x: number; y: number }
-  /** 提交（失焦 / Esc / Ctrl+Enter） */
+  /** 提交（失焦 / Ctrl+Enter；Esc 在未开启 escapeToCancel 时） */
   onSubmit: (value: string) => void
-  /** 取消（可选） */
+  /** 取消（Esc，需 escapeToCancel） */
   onCancel?: () => void
+  /** Esc 走取消而非提交，默认 false */
+  escapeToCancel?: boolean
 }
 
 export interface ABEmbedEditorHandle {
   destroy: () => void
   getValue: () => string
+  /** 主动提交并关闭 */
+  submit: () => void
+  /** 主动取消并关闭（无 onCancel 时等同 destroy） */
+  cancel: () => void
 }
 
 /**
@@ -161,6 +167,12 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     opts.onSubmit(text)
   }
 
+  const cancel = () => {
+    if (destroyed) return
+    destroy()
+    opts.onCancel?.()
+  }
+
   // 伪造 markdown controller，让内部 Editor 以为处于源码模式
   const controller: Record<string, any> = {
     app: opts.app,
@@ -241,7 +253,8 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
             {
               key: "Escape",
               run: () => {
-                submit()
+                if (opts.escapeToCancel && opts.onCancel) cancel()
+                else submit()
                 return true
               },
               preventDefault: true,
@@ -328,7 +341,7 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     cm?.requestMeasure()
   }, 0)
 
-  return { destroy, getValue }
+  return { destroy, getValue, submit, cancel }
 }
 
 export interface ABTitleTextEditorOptions {
@@ -445,6 +458,8 @@ function openABTitleInputEditor(opts: ABTitleTextEditorOptions): ABEmbedEditorHa
   return {
     destroy: cancel,
     getValue: () => (destroyed ? opts.value : input.value),
+    submit,
+    cancel,
   }
 }
 
@@ -548,5 +563,7 @@ function openABTitleContentEditable(opts: ABTitleTextEditorOptions): ABEmbedEdit
       cancel()
     },
     getValue: () => (destroyed ? opts.value : getText()),
+    submit,
+    cancel,
   }
 }

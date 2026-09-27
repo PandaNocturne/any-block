@@ -84,7 +84,7 @@ export default {
   'Edit mode render': '编辑模式渲染',
   'Edit mode render2': '开启后在「实时预览」中渲染 AnyBlock；关闭后实时预览也不渲染。源码模式始终不渲染（仅显示原文）',
   'Embed edit': '嵌入编辑',
-  'Embed edit2': '开启后，在实时预览中双击可就地编辑：卡片/分栏/标签页的标题与内容分开编辑（标题为纯文本、内容为 Markdown）。默认关闭。Esc / Ctrl+Enter / 失焦提交',
+  'Embed edit2': '开启后可就地编辑。进入：Alt+点击，或双击标题/内容。退出：Esc 取消；Ctrl/Cmd+Enter 或失焦提交。卡片/分栏/标签页内容与标题分开编辑（标签页标题为纯文本，其余用 Obsidian 编辑器）。默认关闭',
   'Tab add': '添加标签页',
   'New tab': '新标签',
   'Tab rename': '重命名',
