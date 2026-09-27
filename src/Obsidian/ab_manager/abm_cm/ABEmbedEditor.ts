@@ -341,10 +341,115 @@ export interface ABTitleTextEditorOptions {
 }
 
 /**
- * 标题纯文本就地编辑（contenteditable，非 MarkdownEditor）
- * 避免在 button 内嵌 input（非法 HTML / 点击冒泡问题）
+ * 标题纯文本就地编辑
+ * - button（tabs）：contenteditable（button 内嵌 input 不合法）
+ * - 普通 div（card/col）：用 input，避免 contenteditable 抢焦点导致 CM 退回源码
  */
 export function openABTitleTextEditor(opts: ABTitleTextEditorOptions): ABEmbedEditorHandle {
+  if (opts.containerEl.tagName === "BUTTON") {
+    return openABTitleContentEditable(opts)
+  }
+  return openABTitleInputEditor(opts)
+}
+
+/** card/col 标题：input 编辑，事件全部拦住不传给 CodeMirror */
+function openABTitleInputEditor(opts: ABTitleTextEditorOptions): ABEmbedEditorHandle {
+  const el = opts.containerEl
+  const prevHtml = el.innerHTML
+  el.addClass("ab-embed-title-editor")
+  el.empty()
+
+  const input = document.createElement("input")
+  input.type = "text"
+  input.className = "ab-embed-title-input"
+  input.value = opts.value
+  input.setAttribute("spellcheck", "false")
+  input.style.cssText = [
+    "width:100%",
+    "box-sizing:border-box",
+    "margin:0",
+    "padding:0 2px",
+    "border:none",
+    "outline:none",
+    "background:transparent",
+    "color:inherit",
+    "font:inherit",
+    "font-size:inherit",
+    "line-height:inherit",
+  ].join(";")
+  el.appendChild(input)
+
+  let destroyed = false
+
+  const destroy = () => {
+    if (destroyed) return
+    destroyed = true
+    el.removeClass("ab-embed-title-editor")
+  }
+
+  const submit = () => {
+    if (destroyed) return
+    const text = input.value
+    destroy()
+    opts.onSubmit(text)
+  }
+
+  const cancel = () => {
+    if (destroyed) return
+    destroy()
+    el.innerHTML = prevHtml
+    opts.onCancel?.()
+  }
+
+  const stopCM = (e: Event) => {
+    e.stopPropagation()
+  }
+  const stopCMAndDefault = (e: Event) => {
+    e.stopPropagation()
+    // 阻止 CM / Obsidian 把这次点击当成进入块源码
+    if (e.type === "mousedown" || e.type === "pointerdown") {
+      e.preventDefault()
+    }
+  }
+
+  for (const type of ["mousedown", "pointerdown", "mouseup", "click", "dblclick"] as const) {
+    input.addEventListener(type, stopCMAndDefault, true)
+    el.addEventListener(type, stopCM, true)
+  }
+
+  input.addEventListener("keydown", (e: KeyboardEvent) => {
+    e.stopPropagation()
+    if (e.key === "Enter") {
+      e.preventDefault()
+      submit()
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      cancel()
+    }
+  })
+
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (destroyed) return
+      if (el.contains(document.activeElement) || document.activeElement === input) return
+      submit()
+    }, 80)
+  })
+
+  // 等 dblclick 序列结束再聚焦，避免第二次 click 落到 CM
+  window.setTimeout(() => {
+    input.focus()
+    input.select()
+  }, 0)
+
+  return {
+    destroy: cancel,
+    getValue: () => (destroyed ? opts.value : input.value),
+  }
+}
+
+/** tabs 标题按钮：contenteditable */
+function openABTitleContentEditable(opts: ABTitleTextEditorOptions): ABEmbedEditorHandle {
   const el = opts.containerEl
   const prevText = el.textContent ?? ""
   const prevEditable = el.getAttribute("contenteditable")
@@ -352,12 +457,10 @@ export function openABTitleTextEditor(opts: ABTitleTextEditorOptions): ABEmbedEd
   el.addClass("ab-embed-title-editor")
   el.textContent = opts.value
   el.setAttribute("contenteditable", "plaintext-only")
-  // 部分浏览器不支持 plaintext-only，回退
   if (el.contentEditable !== "plaintext-only" && el.contentEditable !== "true") {
     el.contentEditable = "true"
   }
   el.style.cursor = "text"
-  // 编辑期间禁止 tab 切换
   el.onclick = (ev) => {
     ev.stopPropagation()
     ev.preventDefault()
@@ -395,20 +498,21 @@ export function openABTitleTextEditor(opts: ABTitleTextEditorOptions): ABEmbedEd
     opts.onCancel?.()
   }
 
-  const stop = (e: Event) => {
+  const stopCM = (e: Event) => {
     e.stopPropagation()
+    if (e.type === "mousedown" || e.type === "pointerdown") e.preventDefault()
   }
-  el.addEventListener("mousedown", stop)
-  el.addEventListener("click", stop)
+  for (const type of ["mousedown", "pointerdown", "mouseup", "click", "dblclick"] as const) {
+    el.addEventListener(type, stopCM, true)
+  }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    e.stopPropagation()
     if (e.key === "Enter") {
       e.preventDefault()
-      e.stopPropagation()
       submit()
     } else if (e.key === "Escape") {
       e.preventDefault()
-      e.stopPropagation()
       cancel()
     }
   }
@@ -423,7 +527,6 @@ export function openABTitleTextEditor(opts: ABTitleTextEditorOptions): ABEmbedEd
   }
   el.addEventListener("blur", onBlur)
 
-  // 选中全文
   window.setTimeout(() => {
     el.focus()
     try {
@@ -437,8 +540,9 @@ export function openABTitleTextEditor(opts: ABTitleTextEditorOptions): ABEmbedEd
 
   return {
     destroy: () => {
-      el.removeEventListener("mousedown", stop)
-      el.removeEventListener("click", stop)
+      for (const type of ["mousedown", "pointerdown", "mouseup", "click", "dblclick"] as const) {
+        el.removeEventListener(type, stopCM, true)
+      }
       el.removeEventListener("keydown", onKeyDown)
       el.removeEventListener("blur", onBlur)
       cancel()

@@ -36,6 +36,13 @@ export class ABReplacer_Widget extends WidgetType {
   }
 
   /**
+   * 阻止 CM 处理块内鼠标事件，避免双击标题/内容时光标落入块源码区
+   */
+  ignoreEvent(): boolean {
+    return true
+  }
+
+  /**
    *  div.ab-replace.cm-embed-block.markdown-rendered.show-indentation-guide[type_header=`${}`]
    *      div.drop-shadow.ab-note
    *      div.ab-button.edit-block-button[aria-label="Edit this block"]
@@ -178,6 +185,19 @@ export class ABReplacer_Widget extends WidgetType {
     // - tabs / card / col 标题：纯文本
     // - tabs / card / col 内容：Markdown（正文去掉列表缩进残留）
     let embedEditing = false
+
+    // 捕获阶段拦住指针事件，防止 Obsidian/CM 把点击当成进入块源码
+    const stopEmbedPointerToCM = (e: Event) => {
+      const t = e.target as HTMLElement | null
+      if (!t?.closest) return
+      if (t.closest(".ab-items-title, .ab-items-content, .ab-tab-nav-item, .ab-tab-content-item, .ab-embed-title-editor, .ab-embed-editor")) {
+        e.stopPropagation()
+      }
+    }
+    for (const type of ["mousedown", "pointerdown", "click"] as const) {
+      dom_note.addEventListener(type, stopEmbedPointerToCM, true)
+    }
+
     dom_note.addEventListener("dblclick", (e: MouseEvent) => {
       if (!isEmbedEditEnabled() || embedEditing) return
       if ((e.target as HTMLElement)?.closest?.(".ab-button, .ab-tab-nav-add")) return
@@ -197,6 +217,7 @@ export class ABReplacer_Widget extends WidgetType {
 
       e.preventDefault()
       e.stopPropagation()
+      e.stopImmediatePropagation?.()
 
       const plugin = getEmbedEditPlugin()
       if (!plugin || !this.global_editor) return
