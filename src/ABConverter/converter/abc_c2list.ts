@@ -331,6 +331,38 @@ export class C2ListProcess{
     el.setAttribute("data-ab-card-body", body)
   }
 
+  /** 下次渲染 tabs 时激活的条目下标（嵌入编辑写回后消费一次） */
+  private static pendingTabActivateIndex: number | null = null
+
+  static setPendingTabActivateIndex(index: number | null) {
+    C2ListProcess.pendingTabActivateIndex = index
+  }
+
+  static consumePendingTabActivateIndex(): number | null {
+    const v = C2ListProcess.pendingTabActivateIndex
+    C2ListProcess.pendingTabActivateIndex = null
+    return v
+  }
+
+  /**
+   * 激活指定下标的标签页
+   */
+  static activateTabIndex(tab: HTMLElement, index: number) {
+    const lis = tab.querySelectorAll(":scope>.ab-tab-nav>.ab-tab-nav-item")
+    const contents = tab.querySelectorAll(":scope>.ab-tab-content>.ab-tab-content-item")
+    if (!lis.length || lis.length !== contents.length) return
+    const i = Math.max(0, Math.min(index, lis.length - 1))
+    for (let j = 0; j < contents.length; j++) {
+      lis[j].setAttribute("is_activate", "false")
+      contents[j].setAttribute("is_activate", "false")
+      ;(contents[j] as HTMLElement).style.display = "none"
+    }
+    lis[i].setAttribute("is_activate", "true")
+    contents[i].setAttribute("is_activate", "true")
+    ;(contents[i] as HTMLElement).style.display = "block"
+    tab.setAttribute("data-ab-active-index", String(i))
+  }
+
   /**
    * 两列列表数据转标签栏
    */
@@ -353,13 +385,13 @@ export class C2ListProcess{
         item_index++
         pending_title = item.content
         const nav_item = document.createElement("button"); nav.appendChild(nav_item); nav_item.classList.add("ab-tab-nav-item");
-          nav_item.setAttribute("is_activate", i==0?"true":"false");
+          nav_item.setAttribute("is_activate", "false");
           nav_item.setAttribute("data_index", i.toString()); // data_index 用于方便从数组中删除
           nav_item.textContent = item.content.slice(0,20);
           C2ListProcess.stampEmbedItemAttrs(nav_item, item_index, item.content, "")
 
         current_dom = document.createElement("div"); content.appendChild(current_dom); current_dom.classList.add("ab-tab-content-item");
-          current_dom.setAttribute("style", i==0?"display:block":"display:none"); current_dom.setAttribute("is_activate", i==0?"true":"false");
+          current_dom.setAttribute("style", "display:none"); current_dom.setAttribute("is_activate", "false");
           C2ListProcess.stampEmbedItemAttrs(current_dom, item_index, item.content, "")
       }
       // b2. item内容，在空内容的基础上填充
@@ -388,14 +420,7 @@ export class C2ListProcess{
       // ob选用
       if (ABCSetting.env.startsWith("obsidian")) {
         lis[i].onclick = ()=>{
-          for (let j=0; j<contents.length; j++){
-            lis[j].setAttribute("is_activate", "false")
-            contents[j].setAttribute("is_activate", "false")
-            contents[j].setAttribute("style", "display:none")
-          }
-          lis[i].setAttribute("is_activate", "true")
-          contents[i].setAttribute("is_activate", "true")
-          contents[i].setAttribute("style", "display:block")
+          C2ListProcess.activateTabIndex(tab, i)
         }
       }
       // 2. 二选一，嵌入内联onclick
@@ -417,9 +442,14 @@ export class C2ListProcess{
           tab_current.setAttribute("is_activate", "true")
           tab_content_items[i].setAttribute("is_activate", "true")
           tab_content_items[i].setAttribute("style", "display:block")
+          tab_root.setAttribute("data-ab-active-index", String(i))
         `)
       }
     }
+
+    // 恢复嵌入编辑前的激活页，否则默认第一项
+    const pending = C2ListProcess.consumePendingTabActivateIndex()
+    C2ListProcess.activateTabIndex(tab, pending == null ? 0 : pending)
 
     return div
   }
@@ -531,7 +561,42 @@ export class C2ListProcess{
     }
     return out.replace(/\n$/, "")
   }
+
+  /** 将 c2 流拆成「标题+正文」条目对 */
+  static c2dataToPairs(data: List_C2ListItem): C2ListPair[] {
+    const pairs: C2ListPair[] = []
+    let cur: C2ListPair | null = null
+    for (const item of data) {
+      if (item.level === 0) {
+        if (cur) pairs.push(cur)
+        cur = { title: item.content, body: "" }
+      } else if (cur) {
+        cur.body = item.content
+      }
+    }
+    if (cur) pairs.push(cur)
+    return pairs
+  }
+
+  /** 条目对还原为 c2 流 */
+  static pairsToC2data(pairs: C2ListPair[]): List_C2ListItem {
+    const data: List_C2ListItem = []
+    for (const p of pairs) {
+      data.push({ content: p.title, level: 0 })
+      const body = p.body ?? ""
+      if (body.trim() !== "") {
+        data.push({
+          content: body.endsWith("\n") || body === "" ? body : body + "\n",
+          level: 1,
+        })
+      }
+    }
+    return data
+  }
 }
+
+/** 标签/卡片等共用的标题+正文对 */
+export type C2ListPair = { title: string; body: string }
 
 const _abc_list2c2listdata = ABConvert.factory({
   id: "list2c2listdata",

@@ -267,6 +267,9 @@ html[data-theme=dark] #app {
   border-radius: 10px 10px 0 0;
   padding-right: 88px;
   pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
 }
 .ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-item {
   pointer-events: auto;
@@ -287,6 +290,32 @@ html[data-theme=dark] #app {
 .ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-item[is_activate=true] {
   background-color: var(--ab-tab-root-bg-color);
   color: var(--ab-tab-root-tx-color);
+}
+.ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-item.ab-dragging {
+  opacity: 0.45;
+}
+.ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-item.ab-drag-over {
+  box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+.ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-add {
+  pointer-events: auto;
+  height: 38px;
+  min-width: 32px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--ab-tab-root-tx-color);
+  opacity: 0.7;
+  cursor: pointer;
+  font-size: 1.1em;
+  font-weight: bold;
+  line-height: 1;
+}
+.ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-add:hover {
+  opacity: 1;
+  background-color: color-mix(in srgb, var(--ab-tab-root-bg-color) 35%, transparent);
 }
 .ab-note .ab-tab-root .ab-tab-content {
   border: 2px solid var(--ab-tab-root-bd-color);

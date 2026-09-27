@@ -10,6 +10,8 @@ import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
 import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin } from './ABEmbedEditor'
+import { enhanceABTabsChrome } from './ABTabsChrome'
+import type { C2ListPair } from "@/ABConverter/converter/abc_c2list"
 
 export class ABReplacer_Widget extends WidgetType {
   rangeSpec: MdSelectorRangeSpec
@@ -149,6 +151,28 @@ export class ABReplacer_Widget extends WidgetType {
 
     if (!this.global_editor) return this.div // 非有效的实时编辑环境
 
+    // Tabs：拖拽排序 / 添加 / 右键删除·重命名（写回源码）
+    const tabRoot = dom_note.querySelector(".ab-tab-root") as HTMLElement | null
+    if (tabRoot) {
+      enhanceABTabsChrome({
+        tabRoot,
+        onCommit: (mutate, activateIndex) => {
+          if (!this.global_editor) return
+          syncRangeFromDom()
+          const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
+          const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
+          const fullSrc = this.global_editor.getRange(from, to)
+          const newFull = this.applyC2PairsMutation(fullSrc, mutate)
+          if (newFull == null) {
+            new Notice("写入失败：无法解析标签结构")
+            return
+          }
+          C2ListProcess.setPendingTabActivateIndex(activateIndex)
+          save(newFull, true)
+        },
+      })
+    }
+
     // 嵌入编辑：双击单个条目就地编辑；设置默认关闭
     // - tabs 标题（nav）：纯文本 input，只改标题
     // - tabs 内容 / 卡片 / 分栏：Markdown 嵌入编辑
@@ -208,6 +232,7 @@ export class ABReplacer_Widget extends WidgetType {
               itemEl.textContent = title.slice(0, 20)
               return
             }
+            C2ListProcess.setPendingTabActivateIndex(itemIndex)
             save(newFull, true)
           },
           onCancel: () => {
@@ -235,6 +260,7 @@ export class ABReplacer_Widget extends WidgetType {
           embedEditing = false
           const trimmed = newText.replace(/\n$/, "")
           if (trimmed === editValue.replace(/\n$/, "")) {
+            if (isTabContent) C2ListProcess.setPendingTabActivateIndex(itemIndex)
             this.restoreEmbedItemView(dom_note)
             return
           }
@@ -248,9 +274,11 @@ export class ABReplacer_Widget extends WidgetType {
           const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, newBody)
           if (newFull == null) {
             new Notice("写入失败：无法解析条目结构")
+            if (isTabContent) C2ListProcess.setPendingTabActivateIndex(itemIndex)
             this.restoreEmbedItemView(dom_note)
             return
           }
+          if (isTabContent) C2ListProcess.setPendingTabActivateIndex(itemIndex)
           save(newFull, true)
         },
       })
@@ -382,6 +410,19 @@ export class ABReplacer_Widget extends WidgetType {
     newTitle: string,
     newBody: string,
   ): string | null {
+    return this.applyC2PairsMutation(fullSrc, (pairs) => {
+      if (itemIndex < 0 || itemIndex >= pairs.length) return pairs
+      const next = pairs.slice()
+      next[itemIndex] = { title: newTitle, body: newBody }
+      return next
+    })
+  }
+
+  /** 对整块 c2 条目对做变换后写回源码 */
+  private applyC2PairsMutation(
+    fullSrc: string,
+    mutate: (pairs: C2ListPair[]) => C2ListPair[],
+  ): string | null {
     const oldContent = this.rangeSpec.content
     const isTitleSrc = this.isTitleC2Source(oldContent)
     let data: List_C2ListItem
@@ -393,36 +434,12 @@ export class ABReplacer_Widget extends WidgetType {
       return null
     }
     if (!data.length) return null
-
-    let seen = -1
-    let titleIdx = -1
-    for (let i = 0; i < data.length; i++) {
-      if (data[i].level === 0) {
-        seen++
-        if (seen === itemIndex) {
-          titleIdx = i
-          break
-        }
-      }
-    }
-    if (titleIdx < 0) return null
-
-    data[titleIdx] = { content: newTitle, level: 0 }
-    const next = data[titleIdx + 1]
-    const bodyText = newBody.endsWith("\n") || newBody === "" ? newBody : newBody + "\n"
-    if (next && next.level === 1) {
-      if (bodyText.trim() === "") {
-        data.splice(titleIdx + 1, 1)
-      } else {
-        data[titleIdx + 1] = { content: bodyText, level: 1 }
-      }
-    } else if (bodyText.trim() !== "") {
-      data.splice(titleIdx + 1, 0, { content: bodyText, level: 1 })
-    }
-
+    const pairs = mutate(C2ListProcess.c2dataToPairs(data))
+    if (!pairs.length) return null
+    const newData = C2ListProcess.pairsToC2data(pairs)
     const newContent = isTitleSrc
-      ? C2ListProcess.c2data2title(data)
-      : C2ListProcess.c2data2list(data)
+      ? C2ListProcess.c2data2title(newData)
+      : C2ListProcess.c2data2list(newData)
     return this.replaceContentInFullSrc(fullSrc, oldContent, newContent)
   }
 

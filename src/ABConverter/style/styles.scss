@@ -315,6 +315,9 @@ html[data-theme="dark"] #app {
       // 预留右侧控件区（编辑+更多 ≈ 76px）；导航条本身不抢点击，仅 chip 可点
       padding-right: 88px;
       pointer-events: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
       .ab-tab-nav-item {
         pointer-events: auto;
         height: 38px; // 40-2
@@ -333,6 +336,32 @@ html[data-theme="dark"] #app {
         &[is_activate="true"] {
           background-color: var(--ab-tab-root-bg-color);
           color: var(--ab-tab-root-tx-color);
+        }
+        &.ab-dragging {
+          opacity: 0.45;
+        }
+        &.ab-drag-over {
+          box-shadow: inset 2px 0 0 var(--interactive-accent);
+        }
+      }
+      .ab-tab-nav-add {
+        pointer-events: auto;
+        height: 38px;
+        min-width: 32px;
+        margin: 0 4px;
+        padding: 0 8px;
+        border: none;
+        border-radius: 8px 8px 0 0;
+        background: transparent;
+        color: var(--ab-tab-root-tx-color);
+        opacity: 0.7;
+        cursor: pointer;
+        font-size: 1.1em;
+        font-weight: bold;
+        line-height: 1;
+        &:hover {
+          opacity: 1;
+          background-color: color-mix(in srgb, var(--ab-tab-root-bg-color) 35%, transparent);
         }
       }
     }
