@@ -376,7 +376,9 @@ export class ABReplacer_Widget extends WidgetType {
     }
 
     // 捕获：挡住 CM 落点；单击切 tab；Alt+点击 / 双击进入嵌入编辑
-    // 注意：标签页 mousedown 不可 preventDefault，否则 HTML5 拖拽无法开始；右键不可 preventDefault，否则 contextmenu 异常
+    // - 标签页 mousedown 不可 preventDefault，否则 HTML5 拖拽无法开始
+    // - 右键不可 preventDefault，否则 contextmenu 异常
+    // - 正文/标题单击不可 preventDefault，否则无法按住框选
     const onEmbedPointerDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null
       if (!isEmbedHitTarget(t)) return
@@ -394,7 +396,7 @@ export class ABReplacer_Widget extends WidgetType {
         return
       }
 
-      // 右键：只挡 CM，交给 contextmenu；顺带收起已打开的菜单（避免叠开）
+      // 右键：只挡 CM，交给 contextmenu
       if (e.button !== 0) {
         e.stopPropagation()
         return
@@ -450,12 +452,12 @@ export class ABReplacer_Widget extends WidgetType {
         return
       }
 
-      // 非标签区域：挡 CM 落点
+      // 非标签区域：只挡 CM 冒泡；默认不 preventDefault，允许按住框选
       e.stopPropagation()
-      e.preventDefault()
 
-      // 编辑中点外部：主动提交退出（preventDefault 会阻止原生 blur）
+      // 编辑中点外部：主动提交退出
       if (embedEditing) {
+        e.preventDefault()
         lastEmbedTap = null
         exitEmbedOnOutside()
         return
@@ -471,6 +473,7 @@ export class ABReplacer_Widget extends WidgetType {
 
       // Alt+点击：一键进入编辑
       if (e.altKey) {
+        e.preventDefault()
         lastEmbedTap = null
         startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
         return
@@ -483,14 +486,25 @@ export class ABReplacer_Widget extends WidgetType {
         && now - lastEmbedTap.at < 550
 
       if (isDouble) {
+        e.preventDefault()
         lastEmbedTap = null
         startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
       } else {
+        // 单击 / 拖选：不 preventDefault
         lastEmbedTap = { key: hit.key, at: now }
       }
     }
 
     dom_note.addEventListener("mousedown", onEmbedPointerDown, true)
+
+    // 框选拖动时也别让 mousemove 冒泡到 CM（否则 CM 可能跟着选中源码）
+    const stopSelectDragToCM = (e: MouseEvent) => {
+      if (!(e.buttons & 1)) return
+      if (!isEmbedHitTarget(e.target as HTMLElement)) return
+      if (isInsideActiveEmbed(e.target as HTMLElement)) return
+      e.stopPropagation()
+    }
+    dom_note.addEventListener("mousemove", stopSelectDragToCM, true)
 
     const stopBubbleToCM = (e: Event) => {
       if (!isEmbedHitTarget(e.target as HTMLElement)) return
