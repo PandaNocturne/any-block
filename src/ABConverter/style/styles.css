@@ -4,8 +4,9 @@
  *
  * 修改/使用说明：
  *
- * vuepress-mdit环境直接用scss，ob这边需要使用css
- * 编辑ABC模块的该文件时，需要手动编译/使用vscode `easy sass` 插件
+ * - 源文件为本 scss；Obsidian 插件构建时会自动编译为 styles.css 并复制到插件根目录
+ * - 修改样式：编辑本文件后执行 `npm run build`（或 `pnpm run ob:build`）即可
+ * - vuepress-mdit 环境可直接引用本 scss
  *
  * 换行问题：AnyBlock的块宽度很多都是不满100%的，在窄区域中显示多文本时经常需要使用换行
  * - 不换行时
@@ -145,41 +146,33 @@ html[data-theme=dark] #app {
   position: relative;
   /*padding: 24px 12px 12px 12px;*/
 }
-.ab-replace .ab-items-item.ab-embed-editor,
-.ab-replace .ab-tab-content-item.ab-embed-editor,
-.ab-replace tr.ab-embed-editor,
-.ab-replace > .ab-note.ab-embed-editor {
-  /* 尺寸由 JS 按原文锁定；这里只做编辑态提示，避免 padding/border 改变布局 */
-  outline: 2px solid var(--interactive-accent);
-  outline-offset: -2px;
-  border: none !important;
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor,
+.ab-replace > .ab-note tr.ab-embed-editor, .ab-replace > .ab-note.ab-embed-editor {
   border-radius: 4px;
-  background-color: var(--background-primary);
+  background-color: transparent;
   box-shadow: none;
   margin: 0 !important;
   overflow: hidden;
 }
-.ab-replace .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace .ab-tab-content-item.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace tr.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner {
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note tr.ab-embed-editor .ab-embed-editor-inner, .ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner {
   width: 100%;
   height: 100%;
   min-height: inherit;
   box-sizing: border-box;
 }
-.ab-replace .ab-items-item.ab-embed-editor .cm-editor,
-.ab-replace .ab-tab-content-item.ab-embed-editor .cm-editor,
-.ab-replace tr.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note.ab-embed-editor .cm-editor {
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-editor, .ab-replace > .ab-note.ab-embed-editor .cm-editor {
   background: transparent;
   height: 100%;
   font-size: inherit;
 }
-.ab-replace .ab-items-item.ab-embed-editor .cm-scroller,
-.ab-replace .ab-tab-content-item.ab-embed-editor .cm-scroller,
-.ab-replace tr.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note.ab-embed-editor .cm-scroller {
+.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note tr.ab-embed-editor .cm-scroller, .ab-replace > .ab-note.ab-embed-editor .cm-scroller {
   font-family: var(--font-text, inherit);
   line-height: var(--line-height-normal, 1.5);
 }
@@ -326,13 +319,11 @@ html[data-theme=dark] #app {
 .ab-note table.ab-table td, .ab-note table.ab-table th {
   white-space: normal;
   overflow-wrap: break-word;
+  padding: 2px 5px;
+  border: solid var(--ab-table-border-width) var(--ab-table-border-color);
 }
 .ab-note table.ab-table td code, .ab-note table.ab-table th code {
   white-space: pre;
-}
-.ab-note table.ab-table td, .ab-note table.ab-table th {
-  padding: 2px 5px;
-  border: solid var(--ab-table-border-width) var(--ab-table-border-color);
 }
 .ab-note table.ab-table tr {
   background: none;
@@ -633,10 +624,6 @@ html[data-theme=dark] #app {
   color: #252525;
   text-shadow: none;
 }
-.ab-note .ab-deco-heimu::-moz-selection, .ab-note .ab-deco-heimu a::-moz-selection {
-  background: #9ab0c0;
-  color: #fff;
-}
 .ab-note .ab-deco-heimu::selection, .ab-note .ab-deco-heimu a::selection {
   background: #9ab0c0;
   color: #fff;
@@ -703,8 +690,7 @@ html[data-theme=dark] #app {
   display: flex;
   flex-wrap: wrap;
   gap: 0rem;
-  -moz-column-count: unset;
-       column-count: unset;
+  column-count: unset;
 }
 .ab-note .ab-items.ab-card:not(.ab-lay-hfall):not(.ab-lay-grid) > .ab-items-item {
   flex: 1 0 calc(33.33% - 1rem);
@@ -730,23 +716,21 @@ html[data-theme=dark] #app {
   display: flex;
   flex-wrap: wrap;
   gap: 0rem;
-  -moz-column-count: unset;
-       column-count: unset;
+  column-count: unset;
 }
 .ab-note .ab-items.ab-card.ab-lay-vfall:not(.ab-lay-hfall):not(.ab-lay-grid) .ab-items-item {
   flex: 1 0 calc(33.33% - 1rem);
   box-sizing: border-box;
-  -moz-column-break-inside: auto;
-       break-inside: auto;
-}
-.ab-note .ab-items.ab-card.ab-lay-hfall .ab-items-item .ab-items-title {
-  color: currentColor;
-  border-bottom: none;
+  break-inside: auto;
 }
 .ab-note .ab-items.ab-card.ab-lay-hfall {
   display: flex;
   flex-wrap: wrap;
   flex-direction: row;
+}
+.ab-note .ab-items.ab-card.ab-lay-hfall .ab-items-item .ab-items-title {
+  color: currentColor;
+  border-bottom: none;
 }
 .ab-note .ab-items.ab-card.ab-lay-hfall::after {
   content: "";
@@ -764,8 +748,7 @@ html[data-theme=dark] #app {
   min-width: 100%;
   height: 200px;
   margin: 0;
-  -o-object-fit: cover;
-     object-fit: cover;
+  object-fit: cover;
   vertical-align: bottom;
 }
 .ab-note .ab-items.ab-card.ab-lay-hfall > .ab-items-item p {
@@ -819,64 +802,56 @@ html[data-theme=dark] #app {
   overflow-x: auto;
 }
 .ab-note .ab-items.ab-col1 {
-  -moz-column-count: 1 !important;
-       column-count: 1 !important;
+  column-count: 1 !important;
   grid-template-columns: repeat(1, 1fr) !important;
 }
 .ab-note .ab-items.ab-col1 > .ab-items-item {
   flex: 1 0 calc(100% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col2 {
-  -moz-column-count: 2 !important;
-       column-count: 2 !important;
+  column-count: 2 !important;
   grid-template-columns: repeat(2, 1fr) !important;
 }
 .ab-note .ab-items.ab-col2 > .ab-items-item {
   flex: 1 0 calc(50% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col3 {
-  -moz-column-count: 3 !important;
-       column-count: 3 !important;
+  column-count: 3 !important;
   grid-template-columns: repeat(3, 1fr) !important;
 }
 .ab-note .ab-items.ab-col3 > .ab-items-item {
   flex: 1 0 calc(33.33% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col4 {
-  -moz-column-count: 4 !important;
-       column-count: 4 !important;
+  column-count: 4 !important;
   grid-template-columns: repeat(4, 1fr) !important;
 }
 .ab-note .ab-items.ab-col4 > .ab-items-item {
   flex: 1 0 calc(25% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col5 {
-  -moz-column-count: 5 !important;
-       column-count: 5 !important;
+  column-count: 5 !important;
   grid-template-columns: repeat(5, 1fr) !important;
 }
 .ab-note .ab-items.ab-col5 > .ab-items-item {
   flex: 1 0 calc(20% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col6 {
-  -moz-column-count: 6 !important;
-       column-count: 6 !important;
+  column-count: 6 !important;
   grid-template-columns: repeat(6, 1fr) !important;
 }
 .ab-note .ab-items.ab-col6 > .ab-items-item {
   flex: 1 0 calc(16.66% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col7 {
-  -moz-column-count: 7 !important;
-       column-count: 7 !important;
+  column-count: 7 !important;
   grid-template-columns: repeat(7, 1fr) !important;
 }
 .ab-note .ab-items.ab-col7 > .ab-items-item {
   flex: 1 0 calc(14.28% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col8 {
-  -moz-column-count: 8 !important;
-       column-count: 8 !important;
+  column-count: 8 !important;
   grid-template-columns: repeat(8, 1fr) !important;
 }
 .ab-note .ab-items.ab-col8 > .ab-items-item {
@@ -1217,23 +1192,19 @@ table.ab-table-fc th[col_index="0"], table.ab-table-fc td[col_index="0"] {
 
 /**************** CM Style *******************/
 .ab-line-brace {
-  -webkit-text-decoration: underline 1px red;
-          text-decoration: underline 1px red;
+  text-decoration: underline 1px red;
 }
 
 .ab-line-list {
-  -webkit-text-decoration: underline 1px cyan;
-          text-decoration: underline 1px cyan;
+  text-decoration: underline 1px cyan;
 }
 
 .ab-line-yellow {
-  -webkit-text-decoration: solid underline 1px rgba(0, 255, 0, 0.2);
-          text-decoration: solid underline 1px rgba(0, 255, 0, 0.2);
+  text-decoration: solid underline 1px rgba(0, 255, 0, 0.2);
 }
 
 .ab-line-blue {
-  -webkit-text-decoration: underline 1px blue;
-          text-decoration: underline 1px blue;
+  text-decoration: underline 1px blue;
 }
 
 .bright-color {

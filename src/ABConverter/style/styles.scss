@@ -3,8 +3,9 @@
  *
  * 修改/使用说明：
  *
- * vuepress-mdit环境直接用scss，ob这边需要使用css
- * 编辑ABC模块的该文件时，需要手动编译/使用vscode `easy sass` 插件
+ * - 源文件为本 scss；Obsidian 插件构建时会自动编译为 styles.css 并复制到插件根目录
+ * - 修改样式：编辑本文件后执行 `npm run build`（或 `pnpm run ob:build`）即可
+ * - vuepress-mdit 环境可直接引用本 scss
  *
  * 换行问题：AnyBlock的块宽度很多都是不满100%的，在窄区域中显示多文本时经常需要使用换行
  * - 不换行时
@@ -180,11 +181,12 @@ html[data-theme="dark"] #app {
     .ab-tab-content-item.ab-embed-editor,
     tr.ab-embed-editor,
     &.ab-embed-editor {
-      outline: 2px solid var(--interactive-accent);
-      outline-offset: -2px;
-      border: none !important;
+      // outline: 2px solid var(--interactive-accent);
+      // outline-offset: -2px;
+      // border: none !important;
       border-radius: 4px;
-      background-color: var(--background-primary);
+      // background-color: var(--background-primary);
+      background-color: transparent;
       box-shadow: none;
       margin: 0 !important;
       overflow: hidden;
