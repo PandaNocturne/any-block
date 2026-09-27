@@ -147,90 +147,71 @@ html[data-theme=dark] #app {
   z-index: 0;
   /*padding: 24px 12px 12px 12px;*/
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor,
-.ab-replace > .ab-note tr.ab-embed-editor, .ab-replace > .ab-note.ab-embed-editor {
+.ab-replace > .ab-note .ab-embed-editor {
   border-radius: 4px;
   background-color: transparent;
   box-shadow: none;
   margin: 0 !important;
+  padding: 0 !important;
   overflow: hidden;
   width: 100% !important;
   max-width: 100% !important;
-  box-sizing: border-box;
+  box-sizing: border-box !important;
   --file-line-width: 100% !important;
   --file-margins: 0px !important;
   --line-width: 100% !important;
   --content-max-width: 100% !important;
+  --file-line-width-mobile: 100% !important;
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-sizer,
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-contentContainer,
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-content,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-sizer,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-contentContainer,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-content,
-.ab-replace > .ab-note tr.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-sizer,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-contentContainer,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-content, .ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note.ab-embed-editor .cm-sizer,
-.ab-replace > .ab-note.ab-embed-editor .cm-contentContainer,
-.ab-replace > .ab-note.ab-embed-editor .cm-content {
+.ab-replace > .ab-note .ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note .ab-embed-editor .markdown-source-view,
+.ab-replace > .ab-note .ab-embed-editor .cm-editor,
+.ab-replace > .ab-note .ab-embed-editor .cm-scroller,
+.ab-replace > .ab-note .ab-embed-editor .cm-sizer,
+.ab-replace > .ab-note .ab-embed-editor .cm-contentContainer,
+.ab-replace > .ab-note .ab-embed-editor .cm-content {
   max-width: none !important;
   width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
   margin-left: 0 !important;
   margin-right: 0 !important;
-  box-sizing: border-box;
+  box-sizing: border-box !important;
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .ab-embed-editor-inner,
-.ab-replace > .ab-note tr.ab-embed-editor .ab-embed-editor-inner, .ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner {
+.ab-replace > .ab-note .ab-embed-editor .ab-embed-editor-inner {
   height: 100%;
   min-height: inherit;
-  padding: 0;
+  padding: 0 !important;
+  display: block;
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-editor,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-editor, .ab-replace > .ab-note.ab-embed-editor .cm-editor {
+.ab-replace > .ab-note .ab-embed-editor .cm-editor {
   background: transparent;
   height: 100%;
+  min-height: inherit;
   font-size: inherit;
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-gutters,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-gutters,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-gutters, .ab-replace > .ab-note.ab-embed-editor .cm-gutters {
+.ab-replace > .ab-note .ab-embed-editor .cm-gutters {
   display: none !important;
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-scroller,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-scroller, .ab-replace > .ab-note.ab-embed-editor .cm-scroller {
+.ab-replace > .ab-note .ab-embed-editor .cm-scroller {
   font-family: var(--font-text, inherit);
-  line-height: var(--line-height-normal, 1.5);
+  line-height: inherit;
   padding: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-content,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-content,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-content, .ab-replace > .ab-note.ab-embed-editor .cm-content {
+.ab-replace > .ab-note .ab-embed-editor .cm-content {
   padding: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   caret-color: var(--text-normal);
 }
-.ab-replace > .ab-note .ab-items-item.ab-embed-editor .cm-line,
-.ab-replace > .ab-note .ab-tab-content-item.ab-embed-editor .cm-line,
-.ab-replace > .ab-note tr.ab-embed-editor .cm-line, .ab-replace > .ab-note.ab-embed-editor .cm-line {
+.ab-replace > .ab-note .ab-embed-editor .cm-line {
   max-width: none !important;
   padding-right: 0 !important;
+  padding-left: 0 !important;
 }
 .ab-replace > .ab-button {
   box-sizing: border-box;

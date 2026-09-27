@@ -86,9 +86,8 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     return null
   }
 
-  // 高度按原文锁定，宽度跟父级 100%（勿锁 px，否则右侧留白）
+  // 高度按原文锁定，宽度跟父级 100%；编辑期清零 padding，避免相对原选区缩进/偏一侧
   const rect = opts.containerEl.getBoundingClientRect()
-  const cs = window.getComputedStyle(opts.containerEl)
   const lockedHeight = Math.max(rect.height, 48)
   const prevInline = {
     width: opts.containerEl.style.width,
@@ -107,25 +106,30 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   opts.containerEl.style.minHeight = `${lockedHeight}px`
   // 高度至少与原文一致，内容变长时可自然增高
   opts.containerEl.style.height = "auto"
-  // 覆盖父级「可读行宽 / 页边距」，否则 .cm-content 右侧会留白
+  opts.containerEl.style.padding = "0"
+  opts.containerEl.style.margin = "0"
+  // 覆盖父级「可读行宽 / 页边距」，否则 .cm-content 居中留白、无法全覆盖
   opts.containerEl.style.setProperty("--file-line-width", "100%")
   opts.containerEl.style.setProperty("--file-margins", "0px")
   opts.containerEl.style.setProperty("--line-width", "100%")
   opts.containerEl.style.setProperty("--content-max-width", "100%")
-  if (!opts.containerEl.style.padding && cs.padding && cs.padding !== "0px") {
-    opts.containerEl.style.padding = cs.padding
-  }
+  opts.containerEl.style.setProperty("--file-line-width-mobile", "100%")
 
   opts.containerEl.empty()
   opts.containerEl.addClass("ab-embed-editor")
 
   const editorEl = opts.containerEl.createDiv({ cls: ["cm-table-widget", "ab-embed-editor-inner"] })
-  editorEl.style.minHeight = `${Math.max(lockedHeight - 8, 40)}px`
+  editorEl.style.minHeight = `${lockedHeight}px`
+  editorEl.style.height = "100%"
   editorEl.style.width = "100%"
   editorEl.style.maxWidth = "100%"
   editorEl.style.boxSizing = "border-box"
+  editorEl.style.padding = "0"
+  editorEl.style.margin = "0"
   editorEl.style.setProperty("--file-line-width", "100%")
   editorEl.style.setProperty("--file-margins", "0px")
+  editorEl.style.setProperty("--line-width", "100%")
+  editorEl.style.setProperty("--content-max-width", "100%")
 
   let destroyed = false
   let cm: EditorView | null = null
@@ -294,30 +298,48 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   controller.editMode = editorInstance
   editorInstance.set(opts.value || "")
 
-  // 直接清掉 CM 内联/计算样式里的可读行宽限制
+  // 直接清掉 CM 内联/计算样式里的可读行宽与居中留白，使编辑区与原选区重合全覆盖
   const squashEmbedWidth = () => {
     if (!cm) return
-    cm.scrollDOM.style.padding = "0"
-    cm.scrollDOM.style.paddingLeft = "0"
-    cm.scrollDOM.style.paddingRight = "0"
-    cm.contentDOM.style.maxWidth = "none"
-    cm.contentDOM.style.width = "100%"
-    cm.contentDOM.style.marginLeft = "0"
-    cm.contentDOM.style.marginRight = "0"
-    cm.dom.style.width = "100%"
-    cm.dom.style.maxWidth = "100%"
-    const sizer = cm.scrollDOM.querySelector(".cm-sizer") as HTMLElement | null
-    if (sizer) {
-      sizer.style.maxWidth = "none"
-      sizer.style.width = "100%"
-      sizer.style.margin = "0"
+    const setImp = (el: HTMLElement | null | undefined, prop: string, value: string) => {
+      el?.style.setProperty(prop, value, "important")
     }
-    const contentContainer = cm.scrollDOM.querySelector(".cm-contentContainer") as HTMLElement | null
-    if (contentContainer) {
-      contentContainer.style.maxWidth = "none"
-      contentContainer.style.width = "100%"
-      contentContainer.style.margin = "0"
+    const fill = (el: HTMLElement | null | undefined) => {
+      if (!el) return
+      setImp(el, "max-width", "none")
+      setImp(el, "width", "100%")
+      setImp(el, "min-width", "0")
+      setImp(el, "margin", "0")
+      setImp(el, "margin-left", "0")
+      setImp(el, "margin-right", "0")
+      setImp(el, "padding-left", "0")
+      setImp(el, "padding-right", "0")
+      setImp(el, "box-sizing", "border-box")
     }
+
+    fill(cm.dom)
+    fill(cm.scrollDOM)
+    fill(cm.contentDOM)
+    setImp(cm.scrollDOM, "padding", "0")
+    setImp(cm.scrollDOM, "padding-top", "0")
+    setImp(cm.scrollDOM, "padding-bottom", "0")
+    setImp(cm.contentDOM, "padding", "0")
+    setImp(cm.dom, "height", "100%")
+    setImp(cm.dom, "min-height", `${lockedHeight}px`)
+
+    opts.containerEl.querySelectorAll<HTMLElement>(
+      ".ab-embed-editor-inner, .markdown-source-view, .cm-sizer, .cm-contentContainer, .cm-content, .cm-line"
+    ).forEach((el) => {
+      fill(el)
+      if (el.classList.contains("cm-sizer") || el.classList.contains("cm-contentContainer")) {
+        setImp(el, "margin", "0")
+      }
+    })
+
+    const inner = opts.containerEl.querySelector(".ab-embed-editor-inner") as HTMLElement | null
+    setImp(inner, "min-height", `${lockedHeight}px`)
+    setImp(inner, "height", "100%")
+    setImp(inner, "padding", "0")
   }
   squashEmbedWidth()
 
@@ -339,6 +361,8 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     cm?.focus()
     // 再次请求布局，确保 scroller 填满锁定高度
     cm?.requestMeasure()
+    // Obsidian 可能在 measure 后再写可读行宽，再清一次
+    window.setTimeout(squashEmbedWidth, 50)
   }, 0)
 
   return { destroy, getValue, submit, cancel }
