@@ -241,20 +241,20 @@ export class ABStateManager {
     else if(editor_mode==Editor_mode.SOURCE_LIVE) {
       decoration_mode = this.plugin_this.settings.decoration_live
     }
-    else {
+    else if(editor_mode==Editor_mode.PREVIEW) {
       decoration_mode = this.plugin_this.settings.decoration_render
+    }
+    else {
+      // 无法判定时不渲染，避免源码模式被误判后仍显示效果
+      decoration_mode = ConfDecoration.none
     }
 
     // 1.2 排除非装饰 (如源码模式) 的情况
     if (decoration_mode == ConfDecoration.none) {
-      // 装饰模式改变，则清空装饰集
-      if (decoration_mode != this.prev_decoration_mode) {
-        decorationSet = decorationSet.update({
-          filter: (from:number, to:number, value:unknown)=>{ return false }
-        })
-      }
-      // 装饰模式不改变，不管
-      else {}
+      // 始终清空装饰集，避免误判后残留的渲染块在源码模式中继续显示
+      decorationSet = decorationSet.update({
+        filter: (_from:number, _to:number, _value:unknown)=>{ return false }
+      })
 
       this.is_prev_cursor_in = true; // 返回前操作1
       this.prev_decoration_mode = decoration_mode; this.prev_editor_mode = editor_mode; // 返回前操作2
@@ -504,18 +504,35 @@ export class ABStateManager {
 
   /**
    * 获取编辑器模式
+   *
+   * 优先用 MarkdownView.getState().source 区分源码 / 实时预览，避免依赖 DOM 上
+   * `is-live-preview` 类（部分情况下类残留会导致源码模式被误判为实时，从而仍渲染）。
    */ 
   private getEditorMode(): Editor_mode {
-    /** @warning 不能用 editor_dom = document
-     * 再editor_dom = editor_dom?.getElementsByClassName("workspace-tabs mod-top mod-active")[0];
-     * 用document的话不知道为什么总是有属性is-live-preview的，总是认为是实时模式 
-     */
     // const t: 'source' | 'preview' = this.view.getMode() // 但判断不出是不是实时
     // let editor_dom: Element | undefined = this.plugin_this.app.workspace.getActiveViewOfType(MarkdownView)?.containerEl // 弃用，当前活动窗口不一定是创建时的那个窗口
-    let editor_dom: Element = this.view.containerEl
-    if (!editor_dom) { // The current cursor is focused on a non-Markdown window.
-      return Editor_mode.NONE; 
+    if (!this.view?.containerEl) {
+      return Editor_mode.NONE;
     }
+
+    const mode = this.view.getMode?.() as ('source' | 'preview' | undefined)
+    if (mode === 'preview') {
+      return Editor_mode.PREVIEW
+    }
+    if (mode === 'source') {
+      // Obsidian: state.source === true 为严格源码模式；false/缺省为实时预览
+      const state = this.view.getState?.() as { source?: boolean } | undefined
+      if (state && state.source === true) return Editor_mode.SOURCE
+      if (state && state.source === false) return Editor_mode.SOURCE_LIVE
+
+      // 兜底：再查 DOM（仅在 getState 不可用时）
+      const sourceView = this.view.containerEl.getElementsByClassName("markdown-source-view")[0]
+      if (sourceView?.classList.contains('is-live-preview')) return Editor_mode.SOURCE_LIVE
+      return Editor_mode.SOURCE
+    }
+
+    // 兼容旧逻辑：data-mode 属性
+    let editor_dom: Element = this.view.containerEl
     let str = editor_dom?.getAttribute("data-mode")
     if (str == "source") {
       editor_dom = editor_dom?.getElementsByClassName("markdown-source-view")[0]

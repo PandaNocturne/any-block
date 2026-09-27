@@ -316,6 +316,23 @@ export class ABSettingTab extends PluginSettingTab {
     ab_tab_content_item = el_tab_content.createEl('div', {cls: 'ab-tab-content-item'})
     new Setting(ab_tab_content_item).setName(t("General")).setHeading();
     new Setting(ab_tab_content_item)
+      .setName(t("Edit mode render"))
+      .setDesc(t("Edit mode render2"))
+      .addToggle(toggle => toggle
+        // 编辑模式渲染开关：映射到 decoration_live；源码模式固定为 none
+        .setValue(settings.decoration_live !== ConfDecoration.none)
+        .onChange(async (value) => {
+          settings.decoration_live = value ? ConfDecoration.block : ConfDecoration.none
+          settings.decoration_source = ConfDecoration.none // 源码模式始终不渲染
+          await this.plugin.saveSettings()
+          // 立即刷新当前打开的 Markdown 视图，使开关立刻生效
+          this.app.workspace.getLeavesOfType('markdown').forEach(leaf => {
+            // @ts-expect-error WorkspaceLeaf 上存在 rebuildView
+            leaf.rebuildView?.()
+          })
+        })
+      )
+    new Setting(ab_tab_content_item)
       .setName(t("Reading auto refresh"))
       .setDesc(t("Reading auto refresh2"))
       .addToggle(toggle => toggle
