@@ -39,6 +39,13 @@ export function isForceRenderEnabled(): boolean {
   return !!(p?.settings?.force_render)
 }
 
+/** 是否开启匹配高亮（光标进入块时下划线标出源码范围） */
+export function isMatchHighlightEnabled(): boolean {
+  const p = _pluginRef as any
+  // 默认开启：旧配置无此字段时视为 true
+  return p?.settings?.match_highlight !== false
+}
+
 /** 从 Obsidian 嵌入体系中取出内部 MarkdownEditor 构造函数 */
 export function getObsidianMarkdownEditorClass(app: App): any {
   // @ts-expect-error Obsidian 私有 API: embedRegistry

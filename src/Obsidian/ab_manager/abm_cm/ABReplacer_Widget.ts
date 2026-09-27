@@ -190,7 +190,7 @@ export class ABReplacer_Widget extends WidgetType {
 
     // 嵌入编辑：设置默认关闭
     // - tabs 标题：纯文本；card/col 标题与内容：Obsidian MarkdownEditor
-    // - 进入：Alt+点击 或 双击（合成，因 mousedown preventDefault 无原生 dblclick）
+    // - 进入：Ctrl/Cmd+点击 或 双击（合成，因 mousedown preventDefault 无原生 dblclick）
     // - 退出：Esc 取消；Ctrl/Cmd+Enter / 失焦 / 点击编辑区外 提交
     let embedEditing = false
     let activeEmbedHandle: ABEmbedEditorHandle | null = null
@@ -386,7 +386,7 @@ export class ABReplacer_Widget extends WidgetType {
       }
     }
 
-    // 捕获：挡住 CM 落点；单击切 tab；Alt+点击 / 双击进入嵌入编辑
+    // 捕获：挡住 CM 落点；单击切 tab；Ctrl/Cmd+点击 / 双击进入嵌入编辑
     // - 标签页 mousedown 不可 preventDefault，否则 HTML5 拖拽无法开始
     // - 右键不可 preventDefault，否则 contextmenu 异常
     // - 正文/标题单击不可 preventDefault，否则无法按住框选
@@ -436,8 +436,8 @@ export class ABReplacer_Widget extends WidgetType {
           return
         }
 
-        // Alt / 双击进入嵌入编辑；单击切换
-        if (e.altKey && isEmbedEditEnabled()) {
+        // Ctrl/Cmd / 双击进入嵌入编辑；单击切换
+        if ((e.ctrlKey || e.metaKey) && isEmbedEditEnabled()) {
           e.preventDefault()
           lastEmbedTap = null
           startEmbedEdit(tabNav, true, e.clientX, e.clientY)
@@ -482,8 +482,8 @@ export class ABReplacer_Widget extends WidgetType {
         return
       }
 
-      // Alt+点击：一键进入编辑
-      if (e.altKey) {
+      // Ctrl/Cmd+点击：一键进入编辑
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
         lastEmbedTap = null
         startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)

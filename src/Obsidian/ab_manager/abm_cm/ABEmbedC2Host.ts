@@ -351,7 +351,7 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
         return
       }
 
-      if (e.altKey && isEmbedEditEnabled()) {
+      if ((e.ctrlKey || e.metaKey) && isEmbedEditEnabled()) {
         e.preventDefault()
         lastEmbedTap = null
         startEmbedEdit(tabNav, true, e.clientX, e.clientY)
@@ -394,7 +394,7 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
       return
     }
 
-    if (e.altKey) {
+    if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       lastEmbedTap = null
       startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)

@@ -28,7 +28,7 @@ import { autoMdSelector, type MdSelectorRangeSpec} from "../../../CodeMirror2/AB
 import { ABReplacer_Widget } from "./ABReplacer_Widget"
 import { abConvertEvent } from "@/ABConverter/ABConvertEvent"
 import { ABCSetting } from "@/ABConverter/ABSetting";
-import { isForceRenderEnabled } from "./ABEmbedEditor"
+import { isForceRenderEnabled, isMatchHighlightEnabled } from "./ABEmbedEditor"
 
 // 获取 - 模式
 enum Editor_mode{
@@ -356,6 +356,7 @@ export class ABStateManager {
     const cursorSpec_last = this.getCursorCh()            // 光标位置 - 过去 (光标移动前的位置)
     let is_current_cursor_in = false // 当前光标是否在ab块区域内
     const forceRender = isForceRenderEnabled()
+    const matchHighlight = isMatchHighlightEnabled()
     let bounceCursorTo: number | null = null // 强制渲染时，误入块内则弹回块外
     for (let rangeSpec of list_rangeSpec){
       // (1) 判断光标与该范围项的关系
@@ -378,11 +379,9 @@ export class ABStateManager {
       if (this.customData.cancelFlag.includes(rangeSpec.from_ch)) {
         // 光标在内
         if (isCursorIn) {
-          const decoration = Decoration.mark({
-            class: "ab-line-yellow",
-            inclusive: true, // 区别: PosAtDom() 时有区别，false的话pos结果有波动，true则获取结果包含两侧符号，更稳定。且 img.cm-widgetBuffer 可能消失
-          // block: true, // 区别: 光标上下移动会跳过 block，但这个也能自行监听且感觉更合适
-          })
+          const markOpts: { class?: string, inclusive: boolean } = { inclusive: true }
+          if (matchHighlight) markOpts.class = "ab-line-yellow"
+          const decoration = Decoration.mark(markOpts)
           list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
           continue
         }
@@ -394,12 +393,16 @@ export class ABStateManager {
         }
       }
 
-      // 该ab区域显示为下划线装饰（光标进入 → 还原源码）
+      // 该ab区域还原为源码（光标进入）；可选匹配高亮下划线
       // 强制渲染开启时跳过，除非上方 cancelFlag 已显式允许
       if (isCursorIn && !forceRender) {
         is_current_cursor_in = true
-        const decoration = Decoration.mark({class: "ab-line-yellow"}) // TODO fix bug：当光标在局部频繁移动时或其他情况? 这里会被重复添加很多层带这个class的span嵌套
-        list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
+        if (matchHighlight) {
+          // TODO fix bug：当光标在局部频繁移动时或其他情况? 这里会被重复添加很多层带这个class的span嵌套
+          const decoration = Decoration.mark({class: "ab-line-yellow"})
+          list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
+        }
+        // 关闭高亮：不挂 mark，该范围无 replace widget，源码自然显示
       }
       // 强制渲染：光标误入仍保持渲染，并准备将光标弹回块外
       else if (isCursorIn && forceRender) {
