@@ -27,3 +27,5 @@ data.json
 # Other
 /src/CodeMirror
 /src/Pro
+
+tmp/

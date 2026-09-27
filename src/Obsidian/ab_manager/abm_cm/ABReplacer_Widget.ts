@@ -1,4 +1,4 @@
-import { Platform, sanitizeHTMLToDom, type Editor, type EditorPosition, Notice } from 'obsidian';
+import { Platform, sanitizeHTMLToDom, MarkdownView, type Editor, type EditorPosition, Notice } from 'obsidian';
 import {
   EditorView,
   WidgetType  // 装饰器部件
@@ -6,8 +6,12 @@ import {
 
 import { ABCSetting } from '@/ABConverter/ABSetting'
 import {ABConvertManager} from "@/ABConverter/ABConvertManager"
+import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc_c2list"
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
+import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, restoreMainEditorContext, isForceRenderEnabled, type ABEmbedEditorHandle } from './ABEmbedEditor'
+import { enhanceABTabsChrome, hideABTabsMenu } from './ABTabsChrome'
+import type { C2ListPair } from "@/ABConverter/converter/abc_c2list"
 
 export class ABReplacer_Widget extends WidgetType {
   rangeSpec: MdSelectorRangeSpec
@@ -29,6 +33,13 @@ export class ABReplacer_Widget extends WidgetType {
     this.content_withPrefix_length = rangeSpec.to_ch - rangeSpec.from_ch
     this.rangeSpec = rangeSpec
     this.global_editor = editor
+  }
+
+  /**
+   * 阻止 CM 处理块内鼠标事件，避免双击标题/内容时光标落入块源码区
+   */
+  ignoreEvent(): boolean {
+    return true
   }
 
   /**
@@ -107,6 +118,22 @@ export class ABReplacer_Widget extends WidgetType {
       return Promise.resolve()
     }
 
+    /** 用 DOM 实时位置刷新 rangeSpec（装饰 map 后 from_ch 会过期） */
+    const syncRangeFromDom = (): boolean => {
+      const pos = getPos()
+      if (!pos) {
+        if (this.lastFromPos == null) return false
+        this.rangeSpec.from_ch = this.lastFromPos
+        this.rangeSpec.to_ch = this.lastFromPos + this.content_withPrefix_length
+        return true
+      }
+      this.lastFromPos = pos.fromPos
+      this.rangeSpec.from_ch = pos.fromPos
+      this.rangeSpec.to_ch = pos.toPos
+      this.content_withPrefix_length = pos.toPos - pos.fromPos
+      return true
+    }
+
     // #endregion
 
     // AnyBlock主体部分，内容替换元素
@@ -131,6 +158,373 @@ export class ABReplacer_Widget extends WidgetType {
 
     if (!this.global_editor) return this.div // 非有效的实时编辑环境
 
+    const wireTabsChrome = () => {
+      const root = dom_note.querySelector(".ab-tab-root") as HTMLElement | null
+      if (!root || !this.global_editor) return
+      enhanceABTabsChrome({
+        tabRoot: root,
+        onCommit: (mutate, activateIndex) => {
+          if (!this.global_editor) return
+          if (!syncRangeFromDom()) {
+            new Notice("写入失败：无法定位块位置")
+            return
+          }
+          const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
+          const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
+          const fullSrc = this.global_editor.getRange(from, to)
+          if (!fullSrc.trim()) {
+            new Notice("写入失败：块内容为空")
+            return
+          }
+          const newFull = this.applyC2PairsMutation(fullSrc, mutate)
+          if (newFull == null) {
+            new Notice("写入失败：无法解析标签结构")
+            return
+          }
+          C2ListProcess.setPendingTabActivateIndex(activateIndex)
+          save(newFull, true)
+        },
+      })
+    }
+    wireTabsChrome()
+
+    // 嵌入编辑：设置默认关闭
+    // - tabs 标题：纯文本；card/col 标题与内容：Obsidian MarkdownEditor
+    // - 进入：Ctrl/Cmd+点击 或 双击（合成，因 mousedown preventDefault 无原生 dblclick）
+    // - 退出：Esc 取消；Ctrl/Cmd+Enter / 失焦 / 点击编辑区外 提交
+    let embedEditing = false
+    let activeEmbedHandle: ABEmbedEditorHandle | null = null
+    let lastEmbedTap: { key: string; at: number } | null = null
+
+    const isEmbedHitTarget = (t: HTMLElement | null) => {
+      if (!t?.closest) return false
+      return !!t.closest(
+        ".ab-items-title, .ab-items-content, .ab-items-item, .ab-tab-nav-item, .ab-tab-content-item, .ab-embed-title-editor, .ab-embed-editor, .ab-embed-title-input"
+      )
+    }
+
+    const resolveEmbedHit = (target: HTMLElement) => {
+      const titlePart = target.closest(".ab-items-title, .ab-tab-nav-item") as HTMLElement | null
+      const contentPart = target.closest(".ab-items-content, .ab-tab-content-item") as HTMLElement | null
+      const hitTitle = !!(titlePart && !contentPart)
+      const hitContent = !!contentPart
+      if (!hitTitle && !hitContent) return null
+      const hitEl = (hitTitle ? titlePart : contentPart) as HTMLElement
+      if (!dom_note.contains(hitEl)) return null
+      const attrHost = (hitEl.closest("[data-ab-item-index]") as HTMLElement | null) || hitEl
+      const idx = attrHost.getAttribute("data-ab-item-index")
+        || attrHost.getAttribute("data-ab-card-index")
+        || "?"
+      const key = `${idx}:${hitTitle ? "t" : "c"}`
+      return { hitEl, hitTitle, hitContent, key }
+    }
+
+    const isInsideActiveEmbed = (t: HTMLElement | null) =>
+      !!t?.closest?.(".ab-embed-title-input, .ab-embed-editor, .ab-embed-title-editor")
+
+    /** 点到 AB 块外（正文其他位置）：自动退出编辑 */
+    const onDocEmbedOutside = (e: MouseEvent) => {
+      if (!embedEditing || !activeEmbedHandle) return
+      const t = e.target as HTMLElement | null
+      if (isInsideActiveEmbed(t)) return
+      if (t && dom_note.contains(t)) return // 块内由 onEmbedPointerDown 处理
+      exitEmbedOnOutside()
+    }
+    const armOutsideExit = () => {
+      document.addEventListener("mousedown", onDocEmbedOutside, true)
+    }
+    const disarmOutsideExit = () => {
+      document.removeEventListener("mousedown", onDocEmbedOutside, true)
+    }
+
+    /** 点编辑区外：主动提交退出（mousedown preventDefault 会挡住原生失焦） */
+    const exitEmbedOnOutside = () => {
+      if (!embedEditing || !activeEmbedHandle) return
+      const h = activeEmbedHandle
+      activeEmbedHandle = null
+      disarmOutsideExit()
+      h.submit()
+    }
+
+    const startEmbedEdit = (hitEl: HTMLElement, hitTitle: boolean, clientX: number, clientY: number) => {
+      if (!isEmbedEditEnabled() || embedEditing) return
+      const plugin = getEmbedEditPlugin()
+      if (!plugin || !this.global_editor) return
+
+      const attrHost = (hitEl.closest("[data-ab-item-index]") as HTMLElement | null) || hitEl
+      const itemIndex = parseInt(
+        attrHost.getAttribute("data-ab-item-index")
+          || attrHost.getAttribute("data-ab-card-index")
+          || "-1",
+        10
+      )
+      if (itemIndex < 0) return
+
+      const title = attrHost.getAttribute("data-ab-item-title")
+        ?? attrHost.getAttribute("data-ab-card-title")
+        ?? ""
+      const body = attrHost.getAttribute("data-ab-item-body")
+        ?? attrHost.getAttribute("data-ab-card-body")
+        ?? ""
+
+      syncRangeFromDom()
+      const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
+      const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
+      const fullSrc = this.global_editor.getRange(from, to)
+      const file = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file ?? null
+      const prevActiveEditor = (plugin.app.workspace as any).activeEditor ?? null
+
+      // —— tabs 标题：仍用纯文本（button 内不宜嵌 OB 编辑器）——
+      if (hitTitle && hitEl.classList.contains("ab-tab-nav-item")) {
+        embedEditing = true
+        activeEmbedHandle = openABTitleTextEditor({
+          containerEl: hitEl,
+          value: title,
+          onSubmit: (newTitleRaw: string) => {
+            activeEmbedHandle = null
+            embedEditing = false
+            disarmOutsideExit()
+            restoreMainEditorContext(plugin.app, prevActiveEditor, null, view)
+            const newTitle = newTitleRaw.trim() || title
+            if (newTitle === title) {
+              hitEl.textContent = title.slice(0, 20)
+              return
+            }
+            const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, body)
+            if (newFull == null) {
+              new Notice("写入失败：无法解析条目结构")
+              hitEl.textContent = title.slice(0, 20)
+              return
+            }
+            C2ListProcess.setPendingTabActivateIndex(
+              C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
+            )
+            save(newFull, true)
+          },
+          onCancel: () => {
+            activeEmbedHandle = null
+            embedEditing = false
+            disarmOutsideExit()
+            restoreMainEditorContext(plugin.app, prevActiveEditor, null, view)
+            hitEl.textContent = title.slice(0, 20)
+          },
+        })
+        armOutsideExit()
+        return
+      }
+
+      // —— card/col 标题 或 任意内容：Obsidian MarkdownEditor ——
+      const isTabContent = hitEl.classList.contains("ab-tab-content-item")
+      const isCardContent = hitEl.classList.contains("ab-items-content")
+      const isCardTitle = hitEl.classList.contains("ab-items-title")
+      const editValue = hitTitle
+        ? title
+        : C2ListProcess.normalizeC2BodyForEdit(body)
+
+      embedEditing = true
+      const handle = openABEmbedEditor({
+        plugin,
+        app: plugin.app,
+        containerEl: hitEl,
+        file,
+        value: editValue,
+        clickCoords: { x: clientX, y: clientY },
+        escapeToCancel: true,
+        hostEditorView: view,
+        onCancel: () => {
+          activeEmbedHandle = null
+          embedEditing = false
+          disarmOutsideExit()
+          if (isTabContent) this.softRestoreTabContent(hitEl, title, body, itemIndex)
+          else if (isCardContent || isCardTitle) this.softRestoreMarkdownPart(hitEl, hitTitle ? title : body)
+          else this.restoreEmbedItemView(dom_note, wireTabsChrome)
+        },
+        onSubmit: (newText: string) => {
+          activeEmbedHandle = null
+          embedEditing = false
+          disarmOutsideExit()
+          const trimmed = newText.replace(/\n$/, "")
+          if (trimmed === editValue.replace(/\n$/, "")) {
+            if (isTabContent) this.softRestoreTabContent(hitEl, title, body, itemIndex)
+            else if (isCardContent || isCardTitle) this.softRestoreMarkdownPart(hitEl, hitTitle ? title : body)
+            else this.restoreEmbedItemView(dom_note, wireTabsChrome)
+            return
+          }
+          let newTitle = title
+          let newBody = body
+          if (hitTitle) {
+            // 标题：合并为单行写回
+            newTitle = trimmed.split("\n").map((l) => l.trim()).filter(Boolean).join(" ") || title
+          } else {
+            newBody = trimmed
+          }
+          const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, newBody)
+          if (newFull == null) {
+            new Notice("写入失败：无法解析条目结构")
+            if (isTabContent) this.softRestoreTabContent(hitEl, title, body, itemIndex)
+            else if (isCardContent || isCardTitle) this.softRestoreMarkdownPart(hitEl, hitTitle ? title : body)
+            else this.restoreEmbedItemView(dom_note, wireTabsChrome)
+            return
+          }
+          if (isTabContent) {
+            // 外部已点到其他标签时保留其 pending，勿覆盖
+            if (C2ListProcess.peekPendingTabActivateIndex() == null) {
+              C2ListProcess.setPendingTabActivateIndex(
+                C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
+              )
+            }
+          }
+          save(newFull, true)
+        },
+      })
+      if (!handle) {
+        embedEditing = false
+        activeEmbedHandle = null
+      } else {
+        activeEmbedHandle = handle
+        armOutsideExit()
+      }
+    }
+
+    // 捕获：挡住 CM 落点；单击切 tab；Ctrl/Cmd+点击 / 双击进入嵌入编辑
+    // - 标签页 mousedown 不可 preventDefault，否则 HTML5 拖拽无法开始
+    // - 右键不可 preventDefault，否则 contextmenu 异常
+    // - 正文/标题单击不可 preventDefault，否则无法按住框选
+    const onEmbedPointerDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null
+      if (!isEmbedHitTarget(t)) return
+
+      // 工具栏 / 添加按钮：编辑中则先退出
+      if (t?.closest?.(".ab-button, .ab-tab-nav-add")) {
+        hideABTabsMenu()
+        if (embedEditing && !isInsideActiveEmbed(t)) exitEmbedOnOutside()
+        return
+      }
+
+      // 编辑器内部：只挡 CM，不 preventDefault，便于聚焦/点选
+      if (isInsideActiveEmbed(t)) {
+        e.stopPropagation()
+        return
+      }
+
+      // 右键：只挡 CM，交给 contextmenu
+      if (e.button !== 0) {
+        e.stopPropagation()
+        return
+      }
+
+      hideABTabsMenu()
+
+      const tabNav = t?.closest?.(".ab-tab-nav-item") as HTMLElement | null
+      const tabRoot = tabNav?.closest?.(".ab-tab-root") as HTMLElement | null
+      const tabIdx = tabNav
+        ? parseInt(tabNav.getAttribute("data-ab-item-index") || "-1", 10)
+        : -1
+
+      // 标签页：只 stopPropagation，不 preventDefault（保留拖拽）
+      if (tabNav && tabRoot && tabIdx >= 0) {
+        e.stopPropagation()
+
+        if (embedEditing) {
+          lastEmbedTap = null
+          C2ListProcess.setPendingTabActivateIndex(tabIdx)
+          exitEmbedOnOutside()
+          if (tabRoot.isConnected) {
+            C2ListProcess.activateTabIndex(tabRoot, tabIdx)
+            C2ListProcess.setPendingTabActivateIndex(null)
+          }
+          return
+        }
+
+        // Ctrl/Cmd / 双击进入嵌入编辑；单击切换
+        if ((e.ctrlKey || e.metaKey) && isEmbedEditEnabled()) {
+          e.preventDefault()
+          lastEmbedTap = null
+          startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+          return
+        }
+
+        const key = `${tabIdx}:t`
+        const now = Date.now()
+        const isDouble =
+          isEmbedEditEnabled()
+          && lastEmbedTap
+          && lastEmbedTap.key === key
+          && now - lastEmbedTap.at < 550
+
+        if (isDouble) {
+          e.preventDefault()
+          lastEmbedTap = null
+          startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+        } else {
+          C2ListProcess.activateTabIndex(tabRoot, tabIdx)
+          lastEmbedTap = isEmbedEditEnabled() ? { key, at: now } : null
+        }
+        return
+      }
+
+      // 非标签区域：只挡 CM 冒泡；默认不 preventDefault，允许按住框选
+      e.stopPropagation()
+
+      // 编辑中点外部：主动提交退出
+      if (embedEditing) {
+        e.preventDefault()
+        lastEmbedTap = null
+        exitEmbedOnOutside()
+        return
+      }
+
+      if (!isEmbedEditEnabled()) return
+
+      const hit = resolveEmbedHit(t!)
+      if (!hit) {
+        lastEmbedTap = null
+        return
+      }
+
+      // Ctrl/Cmd+点击：一键进入编辑
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        lastEmbedTap = null
+        startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
+        return
+      }
+
+      const now = Date.now()
+      const isDouble =
+        lastEmbedTap
+        && lastEmbedTap.key === hit.key
+        && now - lastEmbedTap.at < 550
+
+      if (isDouble) {
+        e.preventDefault()
+        lastEmbedTap = null
+        startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
+      } else {
+        // 单击 / 拖选：不 preventDefault
+        lastEmbedTap = { key: hit.key, at: now }
+      }
+    }
+
+    dom_note.addEventListener("mousedown", onEmbedPointerDown, true)
+
+    // 框选拖动时也别让 mousemove 冒泡到 CM（否则 CM 可能跟着选中源码）
+    const stopSelectDragToCM = (e: MouseEvent) => {
+      if (!(e.buttons & 1)) return
+      if (!isEmbedHitTarget(e.target as HTMLElement)) return
+      if (isInsideActiveEmbed(e.target as HTMLElement)) return
+      e.stopPropagation()
+    }
+    dom_note.addEventListener("mousemove", stopSelectDragToCM, true)
+
+    const stopBubbleToCM = (e: Event) => {
+      if (!isEmbedHitTarget(e.target as HTMLElement)) return
+      e.stopPropagation()
+    }
+    for (const type of ["mouseup", "click", "dblclick"] as const) {
+      dom_note.addEventListener(type, stopBubbleToCM, true)
+    }
+
     // 菜单按钮1 - 编辑
     const btn_edit: HTMLDivElement = this.div.createEl("div", {
       cls: ["ab-button", "ab-button-1", "edit-block-button"], // cm-embed-block和edit-block-button是自带的js样式，用来悬浮显示的，不是我写的
@@ -140,8 +534,18 @@ export class ABReplacer_Widget extends WidgetType {
       btn_edit.classList.remove("edit-block-button"); // 移动端这里的编辑按钮有个独立逻辑，他会自动将你的编辑按钮替换掉
     }
     btn_edit.empty(); btn_edit.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_CODE2));
-    btn_edit.onclick = () => {
+    btn_edit.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       switch_more(false)
+      syncRangeFromDom()
+      // 强制渲染：仅控件可还原源码 —— 先写入 cancelFlag，再移入光标
+      if (isForceRenderEnabled()) {
+        const from = this.rangeSpec.from_ch
+        if (!this.customData.cancelFlag.includes(from)) {
+          this.customData.cancelFlag.push(from)
+        }
+      }
       this.moveCursor()
     }
 
@@ -151,9 +555,12 @@ export class ABReplacer_Widget extends WidgetType {
       attr: {"aria-label": "Copy source content"}
     })
     btn_copy.empty(); btn_copy.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_COPY));
-    btn_copy.onclick = () => {
+    btn_copy.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       if (!this.global_editor) return
       switch_more(false)
+      syncRangeFromDom()
 
       // 这里的content有两种思路
       // - 一是最原本的fromPos-toPos。但可能包含不应该被包含的前缀，需要使用 parent_prefix 去除
@@ -176,7 +583,9 @@ export class ABReplacer_Widget extends WidgetType {
       attr: {"aria-label": "Make the block wider"}
     })
     btn_wider.empty(); btn_wider.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_WIDER));
-    btn_wider.onclick = () => {
+    btn_wider.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       if (dom_note.classList.contains("ab-super-width")) {
         dom_note.classList.remove("ab-super-width")
         this.div.classList.remove("ab-super-width-p")
@@ -193,9 +602,12 @@ export class ABReplacer_Widget extends WidgetType {
       attr: {"aria-label": "Refresh the block"}
     })
     btn_refresh.empty(); btn_refresh.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_REFRESH));
-    btn_refresh.onclick = () => {
+    btn_refresh.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       switch_more(false)
       abConvertEvent(this.div)
+      syncRangeFromDom()
       this.moveCursor(-1)
     }
 
@@ -207,7 +619,11 @@ export class ABReplacer_Widget extends WidgetType {
     btn_more.empty(); btn_more.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_ELLIPSIS));
     let is_show = false
     switch_more(false)
-    btn_more.onclick = () => switch_more()
+    btn_more.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      switch_more()
+    }
     /** 是否显示更多工具栏项 */
     function switch_more(_is_show?: boolean): void {
       if (_is_show !== undefined) is_show = _is_show
@@ -227,6 +643,162 @@ export class ABReplacer_Widget extends WidgetType {
     // 不需要，.edit-block-button 自带非悬浮隐藏的特性
 
     return this.div;
+  }
+
+  /**
+   * 将单个 c2 条目（卡片/标签/时间线）的修改写回整块 AnyBlock 源码
+   * 自动识别列表源 / 标题源
+   */
+  private patchC2ItemInBlockSource(
+    fullSrc: string,
+    itemIndex: number,
+    newTitle: string,
+    newBody: string,
+  ): string | null {
+    return this.applyC2PairsMutation(fullSrc, (pairs) => {
+      if (itemIndex < 0 || itemIndex >= pairs.length) return pairs
+      const next = pairs.slice()
+      next[itemIndex] = { title: newTitle, body: newBody }
+      return next
+    })
+  }
+
+  /** 对整块 c2 条目对做变换后写回源码 */
+  private applyC2PairsMutation(
+    fullSrc: string,
+    mutate: (pairs: C2ListPair[]) => C2ListPair[],
+  ): string | null {
+    // 以编辑器当前区间文本为准刷新 content，避免装饰 remap 后 rangeSpec.content 过期导致「写入失败」
+    const oldContent = this.resolveContentInFullSrc(fullSrc)
+    if (oldContent == null) return null
+    this.rangeSpec.content = oldContent
+
+    const isTitleSrc = this.isTitleC2Source(oldContent)
+    let data: List_C2ListItem
+    try {
+      data = isTitleSrc
+        ? C2ListProcess.title2c2data(oldContent)
+        : C2ListProcess.list2c2data(oldContent)
+    } catch (_) {
+      return null
+    }
+    if (!data.length) return null
+    const pairs = mutate(C2ListProcess.c2dataToPairs(data))
+    if (!pairs.length) return null
+    const newData = C2ListProcess.pairsToC2data(pairs)
+    const newContent = isTitleSrc
+      ? C2ListProcess.c2data2title(newData)
+      : C2ListProcess.c2data2list(newData)
+    return this.replaceContentInFullSrc(fullSrc, oldContent, newContent)
+  }
+
+  /**
+   * 从当前 fullSrc 解析出可替换的 content 段。
+   * 优先匹配缓存的 rangeSpec.content；对不上则按选择器从 fullSrc 剥离 header。
+   */
+  private resolveContentInFullSrc(fullSrc: string): string | null {
+    const cached = this.rangeSpec.content
+    if (cached) {
+      if (fullSrc.includes(cached)) return cached
+      const alt = cached.replace(/\n$/, "")
+      if (alt && fullSrc.includes(alt)) return alt
+      const withNl = cached.endsWith("\n") ? cached : cached + "\n"
+      if (fullSrc.includes(withNl)) return withNl
+    }
+
+    // 列表/括号头：首行是 [header]，其余为 content
+    const lines = fullSrc.split("\n")
+    if (lines.length >= 2) {
+      const first = lines[0]
+      const looksBraceHeader = /^\s*[`\[].*[\]`]\s*$/.test(first)
+        || (this.rangeSpec.header && first.includes("[") && first.includes("]"))
+      if (looksBraceHeader) {
+        return lines.slice(1).join("\n")
+      }
+      // mdit ::: header
+      if (/^\s*:{3,}/.test(first)) {
+        // 去掉首尾 ::: 行
+        let end = lines.length
+        for (let i = lines.length - 1; i > 0; i--) {
+          if (/^\s*:{3,}/.test(lines[i])) { end = i; break }
+        }
+        return lines.slice(1, end).join("\n")
+      }
+    }
+
+    // heading 源：整段即 content
+    if (this.rangeSpec.selector === "heading" || /^#{1,6}\s/.test(fullSrc.trimStart())) {
+      return fullSrc
+    }
+
+    // 兜底：若首行是列表项，整段当 content
+    if (/^\s*[-*+]\s/.test(fullSrc)) return fullSrc
+
+    return null
+  }
+
+  /** 判断内容是否为标题大纲源（title2card / title2tabs / title2timeline） */
+  private isTitleC2Source(content: string): boolean {
+    const first = content.trimStart().split("\n")[0] ?? ""
+    if (/^#{1,6}\s/.test(first)) return true
+    if (this.rangeSpec.selector === "heading") return true
+    if (/title2(card|col|tabs?|timeline)/i.test(this.rangeSpec.header)) return true
+    return false
+  }
+
+  private replaceContentInFullSrc(fullSrc: string, oldContent: string, newContent: string): string | null {
+    const idx = fullSrc.lastIndexOf(oldContent)
+    if (idx >= 0) {
+      return fullSrc.slice(0, idx) + newContent + fullSrc.slice(idx + oldContent.length)
+    }
+    const alt = oldContent.replace(/\n$/, "")
+    const idx2 = fullSrc.lastIndexOf(alt)
+    if (idx2 < 0) return null
+    return fullSrc.slice(0, idx2) + newContent + fullSrc.slice(idx2 + alt.length)
+  }
+
+  /** 取消编辑时整体重渲染预览；可重新挂上 tabs chrome */
+  private restoreEmbedItemView(dom_note: HTMLElement, wireTabsChrome?: () => void) {
+    const hadTabs = !!dom_note.querySelector(".ab-tab-root")
+    if (hadTabs) {
+      C2ListProcess.setPendingTabActivateIndex(
+        C2ListProcess.getActiveTabIndex(dom_note, 0)
+      )
+    }
+    dom_note.empty()
+    dom_note.removeClass("ab-embed-editor")
+    ABConvertManager.autoABConvert(
+      dom_note as HTMLDivElement,
+      this.rangeSpec.header,
+      this.rangeSpec.content,
+      this.rangeSpec.selector
+    )
+    wireTabsChrome?.()
+  }
+
+  /** tabs 内容无改动退出：只恢复该面板，不整块重渲染 */
+  private softRestoreTabContent(
+    itemEl: HTMLElement,
+    title: string,
+    body: string,
+    itemIndex: number,
+  ) {
+    itemEl.empty()
+    itemEl.removeClass("ab-embed-editor")
+    C2ListProcess.stampEmbedItemAttrs(itemEl, itemIndex, title, body)
+    if (body.trim() !== "") {
+      ABConvertManager.getInstance().m_renderMarkdownFn(body, itemEl)
+    }
+  }
+
+  /** card/col 标题或内容无改动退出：按 md 重渲染该局部 */
+  private softRestoreMarkdownPart(el: HTMLElement, md: string) {
+    el.empty()
+    el.removeClass("ab-embed-editor")
+    el.removeClass("ab-embed-title-editor")
+    if (md.trim() !== "") {
+      ABConvertManager.getInstance().m_renderMarkdownFn(md, el)
+    }
   }
 
   /**

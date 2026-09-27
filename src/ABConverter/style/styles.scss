@@ -3,8 +3,9 @@
  *
  * 修改/使用说明：
  *
- * vuepress-mdit环境直接用scss，ob这边需要使用css
- * 编辑ABC模块的该文件时，需要手动编译/使用vscode `easy sass` 插件
+ * - 源文件为本 scss；Obsidian 插件构建时会自动编译为 styles.css 并复制到插件根目录
+ * - 修改样式：编辑本文件后执行 `npm run build`（或 `pnpm run ob:build`）即可
+ * - vuepress-mdit 环境可直接引用本 scss
  *
  * 换行问题：AnyBlock的块宽度很多都是不满100%的，在窄区域中显示多文本时经常需要使用换行
  * - 不换行时
@@ -172,13 +173,93 @@ html[data-theme="dark"] #app {
 
   &>.ab-note{
     position: relative;
+    z-index: 0; // 创建层叠上下文，避免 tab <button> 盖住右侧控件
     /*padding: 24px 12px 12px 12px;*/
+
+    // 嵌入编辑：铺满原选区（class 在 title/content/tab-item 上，勿只写 ab-items-item）
+    // 注意：勿清 .cm-content/.cm-line 的 padding-left，否则有序/无序列表缩进与列表符会消失
+    .ab-embed-editor {
+      border-radius: 4px;
+      background-color: transparent;
+      box-shadow: none;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: auto;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      --file-line-width: 100% !important;
+      --file-margins: 0px !important;
+      --line-width: 100% !important;
+      --content-max-width: 100% !important;
+      --file-line-width-mobile: 100% !important;
+
+      .ab-embed-editor-inner,
+      .markdown-source-view,
+      .cm-editor,
+      .cm-scroller,
+      .cm-sizer,
+      .cm-contentContainer {
+        max-width: none !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        box-sizing: border-box !important;
+      }
+
+      .cm-content {
+        max-width: none !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        box-sizing: border-box !important;
+        caret-color: var(--text-normal);
+      }
+
+      .ab-embed-editor-inner {
+        height: 100%;
+        min-height: inherit;
+        padding: 0 !important;
+        display: block;
+      }
+
+      .cm-editor {
+        background: transparent;
+        height: 100%;
+        min-height: inherit;
+        font-size: inherit;
+      }
+
+      .cm-gutters {
+        display: none !important;
+      }
+
+      .cm-scroller {
+        font-family: var(--font-text, inherit);
+        line-height: inherit;
+        // 仅清 scroller 的可读行宽边距，保留 content/line 的列表缩进
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+      }
+
+      .cm-line {
+        max-width: none !important;
+      }
+    }
   }
 
   &>.ab-button{
     box-sizing: border-box;
     position: absolute;
     top: 4px;
+    z-index: 20; // 高于 .ab-note 内的 tab 按钮等
+    pointer-events: auto;
+    cursor: pointer;
     &.ab-button-1 {
       right: 4px;
     }
@@ -272,8 +353,14 @@ html[data-theme="dark"] #app {
       color: var(--ab-tab-root-tx-color);
       border-bottom: none;
       border-radius: 10px 10px 0 0;
-      padding-right: 60px; // 这个是为了避免与编辑按钮重叠
+      // 预留右侧控件区（编辑+更多 ≈ 76px）；导航条本身不抢点击，仅 chip 可点
+      padding-right: 88px;
+      pointer-events: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
       .ab-tab-nav-item {
+        pointer-events: auto;
         height: 38px; // 40-2
         box-shadow: none;
         border: none;
@@ -291,6 +378,32 @@ html[data-theme="dark"] #app {
           background-color: var(--ab-tab-root-bg-color);
           color: var(--ab-tab-root-tx-color);
         }
+        &.ab-dragging {
+          opacity: 0.45;
+        }
+        &.ab-drag-over {
+          box-shadow: inset 2px 0 0 var(--interactive-accent);
+        }
+      }
+      .ab-tab-nav-add {
+        pointer-events: auto;
+        height: 38px;
+        min-width: 32px;
+        margin: 0 4px;
+        padding: 0 8px;
+        border: none;
+        border-radius: 8px 8px 0 0;
+        background: transparent;
+        color: var(--ab-tab-root-tx-color);
+        opacity: 0.7;
+        cursor: pointer;
+        font-size: 1.1em;
+        font-weight: bold;
+        line-height: 1;
+        &:hover {
+          opacity: 1;
+          background-color: color-mix(in srgb, var(--ab-tab-root-bg-color) 35%, transparent);
+        }
       }
     }
     .ab-tab-content {
@@ -300,7 +413,8 @@ html[data-theme="dark"] #app {
       border-top: none;
       padding: 10px 20px;
       .ab-tab-content-item {
-
+        width: 100%;
+        box-sizing: border-box;
       }
     }
   }
@@ -761,18 +875,42 @@ html[data-theme="dark"] #app {
       display: flex; // Flexbox 布局
       flex-wrap: wrap; // 元素换行显示
       gap: 0rem; // 间隙
-      .ab-items-item {        
+      .ab-items-item {
         flex: 1 0 calc(33.33% - 1rem); // 每个项目的宽度大约为容器的 33.33%，减去间隙的一半
         box-sizing: border-box; // 确保 padding 和 border 不影响元素的实际大小
         padding: 10px;
+
+        .ab-items-content.ab-embed-editor {
+          font-size: inherit !important;
+          .cm-editor, .cm-content, .cm-line {
+            font-size: inherit !important;
+            line-height: inherit;
+          }
+        }
+        .ab-items-title.ab-embed-title-editor {
+          font-size: inherit;
+          width: 100%;
+          box-sizing: border-box;
+        }
       }
     }
 
-    // 卡片
+    // 卡片（选择器与 ab-col 分离；默认 flex 行优先，不依赖 ab-col / 瀑布流 JS）
     &.ab-card {
-      // 布局无关部分
+      // 默认布局：与 col 同形式的 flex，但类名独立，避免与分栏选择器耦合
+      &:not(.ab-lay-hfall):not(.ab-lay-grid) {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0rem;
+        column-count: unset;
+        > .ab-items-item {
+          flex: 1 0 calc(33.33% - 1rem);
+        }
+      }
+
+      // 外观（布局无关）
       .ab-items-item {
-        box-sizing: border-box; // 确保 padding 和 border 不影响元素的实际大小
+        box-sizing: border-box;
         color: var(--ab-tab-root-tx-color);
         background-color: var(--ab-tab-root-bg-color);
         border: solid 2px var(--ab-tab-root-bd-color);
@@ -791,59 +929,38 @@ html[data-theme="dark"] #app {
           border-bottom: 1px solid var(--ab-bright-color);
         }
         .ab-items-content {
-          
+          font-size: inherit;
+
+          &.ab-embed-editor {
+            font-size: inherit !important;
+
+            .cm-editor,
+            .cm-content,
+            .cm-line {
+              font-size: inherit !important;
+              line-height: inherit;
+            }
+          }
+        }
+
+        .ab-items-title.ab-embed-title-editor {
+          font-size: inherit;
+          width: 100%;
+          box-sizing: border-box;
         }
       }
 
-      // 布局1，纵向瀑布流 (有js)
-      &.ab-lay-vfall:not(.ab-hfall) {
-        // 方式一，对齐, flex布局
-        /*display: flex; // Flexbox 布局
-        flex-wrap: wrap; // 元素换行显示
-        gap: 1rem; // 间隙
+      // 兼容旧笔记中的 ab-lay-vfall：同样走 flex，不再用 column-count
+      &.ab-lay-vfall:not(.ab-lay-hfall):not(.ab-lay-grid) {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0rem;
+        column-count: unset;
         .ab-items-item {
-          flex: 1 0 calc(25% - 1rem); // 每个项目的宽度大约为容器的 33.33%，减去间隙的一半
-        }*/
-
-        // 方式二，瀑布流, column-count方式
-        // 列数。其中ob默认700px宽，我定义的小宽度是800，大宽度是1100。假设一列加边框200px较好
-        column-count: 4; // css不支持查询ab.card的宽度，只能查屏幕，这个得让js来
-        // @media (max-width: 1400px) { column-count: 6; }
-        // @media (max-width: 1200px) { column-count: 5; }
-        // @media (max-width: 1000px) { column-count: 4; }
-        // @media (max-width: 800px) { column-count: 3; }
-        // @media (max-width: 600px) { column-count: 2; }
-        // @media (max-width: 400px) { column-count: 1; }
-        column-gap: 10px; // 列间距
-        .ab-items-item {
-          break-inside: avoid-column; // 防止单个元素被拆分到多列
-        }
-
-        // 方式三，瀑布流, grid网格顺序，但兼容性有问题
-        /*display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        grid-gap: 1rem; // 间隙
-        grid-template-rows: masonry; // 兼容有问题，只有火狐支持，还tm的要开选项
-        .ab-items-item {
-          width: 100%;
-          display: block;
-        }*/
-
-        // 方式四，瀑布流, flex布局，一定程度的排序 (非绝对)，但需要给一个合适的高度
-        /*display: flex;          // Flexbox 布局
-        flex-wrap: wrap; // 元素换行显示
-        // gap: 1rem;           // 间隙
-        flex-direction: column; // 按列填充
-        .ab-items-item {
-          position: relative;
-          width: calc(100% / 4);
-          padding: 5px;
+          flex: 1 0 calc(33.33% - 1rem);
           box-sizing: border-box;
-          &:nth-child(4n+1){ order: 1; }
-          &:nth-child(4n+2){ order: 2; }
-          &:nth-child(4n+3){ order: 3; }
-          &:nth-child(4n+0){ order: 4; }
-        }*/
+          break-inside: auto;
+        }
       }
 
       // 布局2，横向瀑布流
@@ -939,14 +1056,14 @@ html[data-theme="dark"] #app {
 
     // 补充结合样式
     // 默认 & { column-count: 4 !important; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr) !important; }
-    &.ab-col1 { column-count: 1 !important; grid-template-columns: repeat(1, 1fr) !important; }
-    &.ab-col2 { column-count: 2 !important; grid-template-columns: repeat(2, 1fr) !important; }
-    &.ab-col3 { column-count: 3 !important; grid-template-columns: repeat(3, 1fr) !important; }
-    &.ab-col4 { column-count: 4 !important; grid-template-columns: repeat(4, 1fr) !important; }
-    &.ab-col5 { column-count: 5 !important; grid-template-columns: repeat(5, 1fr) !important; }
-    &.ab-col6 { column-count: 6 !important; grid-template-columns: repeat(6, 1fr) !important; }
-    &.ab-col7 { column-count: 7 !important; grid-template-columns: repeat(7, 1fr) !important; }
-    &.ab-col8 { column-count: 8 !important; grid-template-columns: repeat(8, 1fr) !important; }
+    &.ab-col1 { column-count: 1 !important; grid-template-columns: repeat(1, 1fr) !important; > .ab-items-item { flex: 1 0 calc(100% - 1rem) !important; } }
+    &.ab-col2 { column-count: 2 !important; grid-template-columns: repeat(2, 1fr) !important; > .ab-items-item { flex: 1 0 calc(50% - 1rem) !important; } }
+    &.ab-col3 { column-count: 3 !important; grid-template-columns: repeat(3, 1fr) !important; > .ab-items-item { flex: 1 0 calc(33.33% - 1rem) !important; } }
+    &.ab-col4 { column-count: 4 !important; grid-template-columns: repeat(4, 1fr) !important; > .ab-items-item { flex: 1 0 calc(25% - 1rem) !important; } }
+    &.ab-col5 { column-count: 5 !important; grid-template-columns: repeat(5, 1fr) !important; > .ab-items-item { flex: 1 0 calc(20% - 1rem) !important; } }
+    &.ab-col6 { column-count: 6 !important; grid-template-columns: repeat(6, 1fr) !important; > .ab-items-item { flex: 1 0 calc(16.66% - 1rem) !important; } }
+    &.ab-col7 { column-count: 7 !important; grid-template-columns: repeat(7, 1fr) !important; > .ab-items-item { flex: 1 0 calc(14.28% - 1rem) !important; } }
+    &.ab-col8 { column-count: 8 !important; grid-template-columns: repeat(8, 1fr) !important; > .ab-items-item { flex: 1 0 calc(12.5% - 1rem) !important; } }
   }
 
   // 节点图、括弧图、ab思维导图

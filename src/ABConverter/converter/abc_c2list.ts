@@ -229,11 +229,19 @@ export class C2ListProcess{
         })
       } else { // b2. 子内容
         if (current_content.trim()=="") { // 第一行的子内容前缀提取
-          if (match_list && match_list[1]) current_content_prefix = match_list[1] // 有 `- `，则为 `- ` 前的字符数
-          else current_content_prefix = "  " // (TODO风险) 无 `- `，则设前缀字符数为2 (用户可能用tab的1和四空格的4，但少消除2个一般不会影响，主要避免前缀4空格自动转化为缩进代码块)
+          if (match_list && match_list[1]) {
+            // 嵌套列表：`- ` 前的缩进
+            current_content_prefix = match_list[1]
+          } else {
+            // 普通缩进正文：取本行行首空白（勿写死 2 空格，否则 4 空格源会残留 2 空格）
+            const lead = line.match(/^[ \t]*/)
+            current_content_prefix = (lead && lead[0].length > 0)
+              ? lead[0]
+              : C2ListProcess.getListIndent()
+          }
         }
         if (line.startsWith("\t")) line = line.substring(1);
-        else if (line.startsWith(current_content_prefix)) { // 子内容前缀去除
+        else if (current_content_prefix && line.startsWith(current_content_prefix)) { // 子内容前缀去除
           line = line.substring(current_content_prefix.length);
         }
         current_content += line+"\n" // 子内容拼接
@@ -314,6 +322,83 @@ export class C2ListProcess{
   }
 
   /**
+   * 给可嵌入编辑的条目打标（卡片 / 标签页 / 时间线等共用）
+   */
+  static stampEmbedItemAttrs(
+    el: HTMLElement,
+    index: number,
+    title: string,
+    body: string,
+  ) {
+    el.setAttribute("data-ab-item-index", String(index))
+    el.setAttribute("data-ab-item-title", title)
+    el.setAttribute("data-ab-item-body", body)
+    // 兼容旧卡片属性名
+    el.setAttribute("data-ab-card-index", String(index))
+    el.setAttribute("data-ab-card-title", title)
+    el.setAttribute("data-ab-card-body", body)
+  }
+
+  /** 下次渲染 tabs 时激活的条目下标（嵌入编辑写回后消费一次） */
+  private static pendingTabActivateIndex: number | null = null
+
+  static setPendingTabActivateIndex(index: number | null) {
+    C2ListProcess.pendingTabActivateIndex = index
+  }
+
+  /** 未消费的待激活下标（不清除；用于避免写回时覆盖外部点击指定的页） */
+  static peekPendingTabActivateIndex(): number | null {
+    return C2ListProcess.pendingTabActivateIndex
+  }
+
+  static consumePendingTabActivateIndex(): number | null {
+    const v = C2ListProcess.pendingTabActivateIndex
+    C2ListProcess.pendingTabActivateIndex = null
+    return v
+  }
+
+  /**
+   * 激活指定下标的标签页
+   */
+  static activateTabIndex(tab: HTMLElement, index: number) {
+    const lis = tab.querySelectorAll(":scope>.ab-tab-nav>.ab-tab-nav-item")
+    const contents = tab.querySelectorAll(":scope>.ab-tab-content>.ab-tab-content-item")
+    if (!lis.length || lis.length !== contents.length) return
+    const i = Math.max(0, Math.min(index, lis.length - 1))
+    for (let j = 0; j < contents.length; j++) {
+      lis[j].setAttribute("is_activate", "false")
+      contents[j].setAttribute("is_activate", "false")
+      ;(contents[j] as HTMLElement).style.display = "none"
+    }
+    lis[i].setAttribute("is_activate", "true")
+    contents[i].setAttribute("is_activate", "true")
+    ;(contents[i] as HTMLElement).style.display = "block"
+    tab.setAttribute("data-ab-active-index", String(i))
+  }
+
+  /**
+   * 读取当前激活标签下标（用于退出编辑时保留用户刚点的页，而非编辑中的页）
+   */
+  static getActiveTabIndex(scope: ParentNode | null | undefined, fallback = 0): number {
+    if (!scope) return fallback
+    const root = (scope instanceof Element && scope.classList.contains("ab-tab-root"))
+      ? scope
+      : scope.querySelector?.(".ab-tab-root")
+    if (!root) return fallback
+    const attr = root.getAttribute("data-ab-active-index")
+    if (attr != null && attr !== "") {
+      const n = parseInt(attr, 10)
+      if (!isNaN(n) && n >= 0) return n
+    }
+    const active = root.querySelector(".ab-tab-nav-item[is_activate='true']") as HTMLElement | null
+    if (active) {
+      const n = parseInt(active.getAttribute("data-ab-item-index") || "-1", 10)
+      if (n >= 0) return n
+    }
+    return fallback
+  }
+
+  /**
    * 两列列表数据转标签栏
    */
   static c2data2tab(
@@ -326,21 +411,31 @@ export class C2ListProcess{
     const nav = document.createElement("div"); tab.appendChild(nav); nav.classList.add("ab-tab-nav");
     const content = document.createElement("div"); tab.appendChild(content); content.classList.add("ab-tab-content")
     let current_dom:HTMLElement|null = null
+    let pending_title = ""
+    let item_index = -1
     for (let i=0; i<list_itemInfo.length; i++){
       const item = list_itemInfo[i]
       // b1. item标题，顺便创建空内容
       if (item.level==0) {
+        item_index++
+        pending_title = item.content
         const nav_item = document.createElement("button"); nav.appendChild(nav_item); nav_item.classList.add("ab-tab-nav-item");
-          nav_item.setAttribute("is_activate", i==0?"true":"false");
+          nav_item.setAttribute("is_activate", "false");
           nav_item.setAttribute("data_index", i.toString()); // data_index 用于方便从数组中删除
           nav_item.textContent = item.content.slice(0,20);
+          C2ListProcess.stampEmbedItemAttrs(nav_item, item_index, item.content, "")
 
         current_dom = document.createElement("div"); content.appendChild(current_dom); current_dom.classList.add("ab-tab-content-item");
-          current_dom.setAttribute("style", i==0?"display:block":"display:none"); current_dom.setAttribute("is_activate", i==0?"true":"false");
+          current_dom.setAttribute("style", "display:none"); current_dom.setAttribute("is_activate", "false");
+          C2ListProcess.stampEmbedItemAttrs(current_dom, item_index, item.content, "")
       }
       // b2. item内容，在空内容的基础上填充
       else if (current_dom) {
         current_dom.setAttribute("data_index", i.toString()); // data_index 用于方便从数组中删除
+        C2ListProcess.stampEmbedItemAttrs(current_dom, item_index, pending_title, item.content)
+        // 同步到对应 nav
+        const nav_item = nav.querySelector(`:scope > .ab-tab-nav-item[data-ab-item-index="${item_index}"]`) as HTMLElement | null
+        if (nav_item) C2ListProcess.stampEmbedItemAttrs(nav_item, item_index, pending_title, item.content)
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, current_dom)
         current_dom = null
       }
@@ -359,15 +454,13 @@ export class C2ListProcess{
       // 1. 二选一，常规绑定
       // ob选用
       if (ABCSetting.env.startsWith("obsidian")) {
-        lis[i].onclick = ()=>{
-          for (let j=0; j<contents.length; j++){
-            lis[j].setAttribute("is_activate", "false")
-            contents[j].setAttribute("is_activate", "false")
-            contents[j].setAttribute("style", "display:none")
-          }
-          lis[i].setAttribute("is_activate", "true")
-          contents[i].setAttribute("is_activate", "true")
-          contents[i].setAttribute("style", "display:block")
+        // mousedown 即切换：保证嵌入编辑失焦提交前 data-ab-active-index 已更新
+        lis[i].onmousedown = (ev: MouseEvent) => {
+          if (ev.button !== 0) return
+          C2ListProcess.activateTabIndex(tab, i)
+        }
+        lis[i].onclick = (ev: MouseEvent) => {
+          ev.preventDefault()
         }
       }
       // 2. 二选一，嵌入内联onclick
@@ -389,9 +482,14 @@ export class C2ListProcess{
           tab_current.setAttribute("is_activate", "true")
           tab_content_items[i].setAttribute("is_activate", "true")
           tab_content_items[i].setAttribute("style", "display:block")
+          tab_root.setAttribute("data-ab-active-index", String(i))
         `)
       }
     }
+
+    // 恢复嵌入编辑前的激活页，否则默认第一项
+    const pending = C2ListProcess.consumePendingTabActivateIndex()
+    C2ListProcess.activateTabIndex(tab, pending == null ? 0 : pending)
 
     return div
   }
@@ -400,16 +498,32 @@ export class C2ListProcess{
   static c2data2items(c2listdata:List_C2ListItem, el:HTMLElement): HTMLElement {
     const el_items = document.createElement("div"); el.appendChild(el_items); el_items.classList.add("ab-items")
     let el_item:HTMLElement|null = null;
+    let card_index = -1
     for (const item of c2listdata) {
       // b1. item标题
       if (item.level == 0) {
+        // 上一张卡若无 body，补空 body 标记
+        if (el_item && !el_item.hasAttribute("data-ab-item-body")) {
+          C2ListProcess.stampEmbedItemAttrs(
+            el_item,
+            parseInt(el_item.getAttribute("data-ab-item-index") || "0", 10),
+            el_item.getAttribute("data-ab-item-title") || "",
+            ""
+          )
+        }
+        card_index++
         el_item = document.createElement("div"); el_items.appendChild(el_item); el_item.classList.add("ab-items-item")
+        C2ListProcess.stampEmbedItemAttrs(el_item, card_index, item.content, "")
         const el_title = document.createElement("div"); el_item.appendChild(el_title); el_title.classList.add("ab-items-title")
+        C2ListProcess.stampEmbedItemAttrs(el_title, card_index, item.content, "")
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_title)
       }
       // b2. item内容
       else if (el_item) {
+        const title = el_item.getAttribute("data-ab-item-title") || ""
+        C2ListProcess.stampEmbedItemAttrs(el_item, card_index, title, item.content)
         const el_content = document.createElement("div"); el_item.appendChild(el_content); el_content.classList.add("ab-items-content")
+        C2ListProcess.stampEmbedItemAttrs(el_content, card_index, title, item.content)
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_content)
       }
       // b3. item内容之前没有item标题，不合法，跳过
@@ -417,9 +531,128 @@ export class C2ListProcess{
         continue
       }
     }
+    if (el_item && !el_item.hasAttribute("data-ab-item-body")) {
+      C2ListProcess.stampEmbedItemAttrs(
+        el_item,
+        parseInt(el_item.getAttribute("data-ab-item-index") || "0", 10),
+        el_item.getAttribute("data-ab-item-title") || "",
+        ""
+      )
+    }
     return el
   }
+
+  /**
+   * 获取列表子项缩进串：跟随 Obsidian 编辑器「使用 Tab」/「Tab 宽度」配置
+   * - useTab=true → `\t`
+   * - 否则 → 重复 tabSize 次空格（默认 4）
+   */
+  static getListIndent(): string {
+    try {
+      const app = ABCSetting.obsidian.global_app as any
+      if (app?.vault?.getConfig) {
+        const useTab = !!app.vault.getConfig("useTab")
+        if (useTab) return "\t"
+        const tabSize = Number(app.vault.getConfig("tabSize"))
+        const n = (!isNaN(tabSize) && tabSize > 0) ? Math.floor(tabSize) : 4
+        return " ".repeat(n)
+      }
+    } catch (_) { /* ignore */ }
+    return "    " // 默认 4 空格
+  }
+
+  /**
+   * 二列列表数据序列化为列表 md（与 list2c2data 互逆，用于嵌入编辑写回）
+   * @param indent 子项缩进，默认读取 Obsidian 编辑器配置（Tab 或 N 空格）
+   */
+  static c2data2list(c2listdata: List_C2ListItem, indent?: string): string {
+    const prefix = indent ?? C2ListProcess.getListIndent()
+    let out = ""
+    for (const item of c2listdata) {
+      if (item.level === 0) {
+        out += `- ${item.content}\n`
+      } else {
+        const body = item.content.replace(/\n$/, "")
+        if (body.trim() === "") continue
+        for (const line of body.split("\n")) {
+          out += `${prefix}${line}\n`
+        }
+      }
+    }
+    return out.replace(/\n$/, "")
+  }
+
+  /**
+   * 二列列表数据序列化为标题大纲 md（与 title2c2data 互逆）
+   */
+  static c2data2title(c2listdata: List_C2ListItem, headingLevel = 1): string {
+    const hashes = "#".repeat(Math.max(1, Math.min(6, headingLevel)))
+    let out = ""
+    for (const item of c2listdata) {
+      if (item.level === 0) {
+        out += `${hashes} ${item.content}\n`
+      } else {
+        const body = item.content.replace(/\n$/, "")
+        if (body.trim() === "") continue
+        out += body + "\n"
+      }
+    }
+    return out.replace(/\n$/, "")
+  }
+
+  /** 将 c2 流拆成「标题+正文」条目对 */
+  static c2dataToPairs(data: List_C2ListItem): C2ListPair[] {
+    const pairs: C2ListPair[] = []
+    let cur: C2ListPair | null = null
+    for (const item of data) {
+      if (item.level === 0) {
+        if (cur) pairs.push(cur)
+        cur = { title: item.content, body: "" }
+      } else if (cur) {
+        cur.body = item.content
+      }
+    }
+    if (cur) pairs.push(cur)
+    return pairs
+  }
+
+  /**
+   * 嵌入编辑用：去掉正文各行共有的前导缩进（渲染时不可见，编辑时会露出来）
+   */
+  static normalizeC2BodyForEdit(body: string): string {
+    const text = body.replace(/\n$/, "")
+    if (!text) return ""
+    const lines = text.split("\n")
+    let minIndent = Infinity
+    for (const line of lines) {
+      if (line.trim() === "") continue
+      const m = line.match(/^[ \t]*/)
+      const n = m ? m[0].length : 0
+      if (n < minIndent) minIndent = n
+    }
+    if (!isFinite(minIndent) || minIndent <= 0) return text
+    return lines.map((line) => (line.trim() === "" ? line : line.slice(minIndent))).join("\n")
+  }
+
+  /** 条目对还原为 c2 流 */
+  static pairsToC2data(pairs: C2ListPair[]): List_C2ListItem {
+    const data: List_C2ListItem = []
+    for (const p of pairs) {
+      data.push({ content: p.title, level: 0 })
+      const body = p.body ?? ""
+      if (body.trim() !== "") {
+        data.push({
+          content: body.endsWith("\n") || body === "" ? body : body + "\n",
+          level: 1,
+        })
+      }
+    }
+    return data
+  }
 }
+
+/** 标签/卡片等共用的标题+正文对 */
+export type C2ListPair = { title: string; body: string }
 
 const _abc_list2c2listdata = ABConvert.factory({
   id: "list2c2listdata",
