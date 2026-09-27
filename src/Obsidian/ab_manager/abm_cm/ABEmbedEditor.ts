@@ -6,6 +6,7 @@
  */
 
 import type { App, Plugin, TFile } from "obsidian"
+import { MarkdownView } from "obsidian"
 import { EditorSelection, Prec, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
 
@@ -65,6 +66,81 @@ export interface ABEmbedEditorOptions {
   onCancel?: () => void
   /** Esc 走取消而非提交，默认 false */
   escapeToCancel?: boolean
+  /** 关闭后可选：把焦点还给主编辑区 EditorView */
+  hostEditorView?: EditorView | null
+}
+
+/**
+ * 恢复主编辑区的 activeEditor / 焦点，避免内联 MarkdownEditor 关掉后快捷键失效
+ * （与 obsidian-kanban 同类问题：workspace.activeEditor 残留在已销毁的 controller 上）
+ */
+export function restoreMainEditorContext(
+  app: App,
+  prevActiveEditor: any,
+  embedOwner: any,
+  hostEditorView?: EditorView | null,
+) {
+  const ws = app.workspace as any
+  const mv = app.workspace.getActiveViewOfType(MarkdownView)
+
+  try {
+    const ae = ws.activeEditor
+    // 卸掉指向嵌入编辑器的残留（controller / editMode / 已失效引用）
+    if (
+      ae == null
+      || ae === embedOwner
+      || (embedOwner && ae === embedOwner.editMode)
+      || (embedOwner && ae?.editor && ae.editor === embedOwner.editor)
+      || (prevActiveEditor && ae === prevActiveEditor && prevActiveEditor === embedOwner)
+    ) {
+      ws.activeEditor = null
+    }
+  } catch (_) { /* ignore */ }
+
+  // 弹掉可能残留的 keymap scope（Obsidian MarkdownEditor 聚焦时会 push）
+  try {
+    const scope = embedOwner?.editMode?.scope || embedOwner?.scope
+    if (scope && ws.app?.keymap) {
+      app.keymap.popScope(scope)
+    } else if (scope) {
+      app.keymap.popScope(scope)
+    }
+  } catch (_) { /* ignore */ }
+
+  const reclaim = () => {
+    try {
+      const view = app.workspace.getActiveViewOfType(MarkdownView) ?? mv
+      if (view) {
+        // 通过 setActiveLeaf 走 Obsidian 正式激活路径
+        const leaf = (view as any).leaf
+        if (leaf) {
+          try {
+            app.workspace.setActiveLeaf(leaf, { focus: true })
+          } catch (_) {
+            try { app.workspace.setActiveLeaf(leaf, true as any) } catch (__) { /* ignore */ }
+          }
+        }
+        ws.activeEditor = view
+        // 部分版本把 currentMode / editMode 当作 activeEditor
+        if ((view as any).editMode && ws.activeEditor !== view) {
+          /* keep view */
+        }
+      } else if (prevActiveEditor && prevActiveEditor !== embedOwner) {
+        ws.activeEditor = prevActiveEditor
+      }
+
+      if (hostEditorView) {
+        hostEditorView.focus()
+      } else {
+        view?.editor?.focus()
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  // 立刻一次 + 下一帧再一次（写回/重渲染后焦点常被冲掉）
+  reclaim()
+  window.setTimeout(reclaim, 0)
+  window.setTimeout(reclaim, 50)
 }
 
 export interface ABEmbedEditorHandle {
@@ -134,6 +210,28 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   let destroyed = false
   let cm: EditorView | null = null
   let editorInstance: any = null
+  // 打开前记下主编辑区 activeEditor，关闭时还原（否则快捷键失效）
+  const prevActiveEditor = (opts.app.workspace as any).activeEditor ?? null
+
+  // 伪造 markdown controller，让内部 Editor 以为处于源码模式
+  const controller: Record<string, any> = {
+    app: opts.app,
+    showSearch: () => {},
+    toggleMode: () => {},
+    onMarkdownScroll: () => {},
+    getMode: () => "source",
+    scroll: 0,
+    editMode: null,
+    get editor() {
+      return editorInstance?.editor
+    },
+    get file() {
+      return opts.file
+    },
+    get path() {
+      return opts.file?.path ?? ""
+    },
+  }
 
   const getValue = (): string => {
     return cm?.state.doc.toString() ?? opts.value
@@ -154,6 +252,28 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     if (destroyed) return
     destroyed = true
     try {
+      cm?.contentDOM?.blur?.()
+    } catch (_) { /* ignore */ }
+    // 嵌入编辑会把 activeEditor 切走；先清空（kanban 同款），再由 reclaim 设回 MarkdownView
+    try {
+      const ws = opts.app.workspace as any
+      const ae = ws.activeEditor
+      if (
+        ae == null
+        || ae === controller
+        || ae === editorInstance
+        || ae === controller.editMode
+        || (ae && !(ae instanceof MarkdownView) && ae !== prevActiveEditor)
+      ) {
+        ws.activeEditor = null
+      }
+    } catch (_) { /* ignore */ }
+    // 弹出 MarkdownEditor 可能 push 的 keymap scope
+    try {
+      const scope = (editorInstance as any)?.scope
+      if (scope) opts.app.keymap.popScope(scope)
+    } catch (_) { /* ignore */ }
+    try {
       if (editorInstance) {
         opts.plugin.removeChild(editorInstance)
         editorInstance = null
@@ -164,37 +284,22 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     restoreBox()
   }
 
+  const finishAndRestore = (after: () => void) => {
+    destroy()
+    try { after() } catch (_) { /* ignore */ }
+    // 写回/软恢复之后再抢回主编辑区上下文（否则快捷键仍指向已销毁 editor）
+    restoreMainEditorContext(opts.app, prevActiveEditor, controller, opts.hostEditorView)
+  }
+
   const submit = () => {
     if (destroyed) return
     const text = getValue()
-    destroy()
-    opts.onSubmit(text)
+    finishAndRestore(() => opts.onSubmit(text))
   }
 
   const cancel = () => {
     if (destroyed) return
-    destroy()
-    opts.onCancel?.()
-  }
-
-  // 伪造 markdown controller，让内部 Editor 以为处于源码模式
-  const controller: Record<string, any> = {
-    app: opts.app,
-    showSearch: () => {},
-    toggleMode: () => {},
-    onMarkdownScroll: () => {},
-    getMode: () => "source",
-    scroll: 0,
-    editMode: null,
-    get editor() {
-      return editorInstance?.editor
-    },
-    get file() {
-      return opts.file
-    },
-    get path() {
-      return opts.file?.path ?? ""
-    },
+    finishAndRestore(() => opts.onCancel?.())
   }
 
   class ABInlineEditor extends MarkdownEditorClass {
@@ -276,14 +381,19 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
       extensions.push(
         Prec.highest(
           EditorView.domEventHandlers({
+            focus: () => {
+              // 记录：Obsidian 内部也可能把 activeEditor 设为 this.owner(controller)
+              // 关闭时靠 finishAndRestore 强制抢回 MarkdownView
+              return false
+            },
             blur: () => {
-              // 延后，避免点击工具栏等导致误提交
+              // 延后提交；return false 让 Obsidian 走完自身 blur（含 keymap scope 清理）
               window.setTimeout(() => {
                 if (destroyed) return
                 if (opts.containerEl.contains(document.activeElement)) return
                 submit()
               }, 150)
-              return true
+              return false
             },
           })
         )
@@ -353,12 +463,12 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     } catch (_) { /* ignore */ }
   }
 
+  // 打开时不要把 activeEditor 切到假 controller。
+  // Obsidian MarkdownEditor 聚焦时仍可能自行写入 owner；关闭路径必须清掉并抢回 MarkdownView。
   window.setTimeout(() => {
     squashEmbedWidth()
     cm?.focus()
-    // 再次请求布局，确保 scroller 填满锁定高度
     cm?.requestMeasure()
-    // Obsidian 可能在 measure 后再写可读行宽，再清一次
     window.setTimeout(squashEmbedWidth, 50)
   }, 0)
 

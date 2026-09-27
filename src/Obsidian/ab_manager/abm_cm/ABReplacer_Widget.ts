@@ -9,7 +9,7 @@ import {ABConvertManager} from "@/ABConverter/ABConvertManager"
 import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc_c2list"
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
-import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, type ABEmbedEditorHandle } from './ABEmbedEditor'
+import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, restoreMainEditorContext, type ABEmbedEditorHandle } from './ABEmbedEditor'
 import { enhanceABTabsChrome, hideABTabsMenu } from './ABTabsChrome'
 import type { C2ListPair } from "@/ABConverter/converter/abc_c2list"
 
@@ -265,6 +265,7 @@ export class ABReplacer_Widget extends WidgetType {
       const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
       const fullSrc = this.global_editor.getRange(from, to)
       const file = plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file ?? null
+      const prevActiveEditor = (plugin.app.workspace as any).activeEditor ?? null
 
       // —— tabs 标题：仍用纯文本（button 内不宜嵌 OB 编辑器）——
       if (hitTitle && hitEl.classList.contains("ab-tab-nav-item")) {
@@ -276,6 +277,7 @@ export class ABReplacer_Widget extends WidgetType {
             activeEmbedHandle = null
             embedEditing = false
             disarmOutsideExit()
+            restoreMainEditorContext(plugin.app, prevActiveEditor, null, view)
             const newTitle = newTitleRaw.trim() || title
             if (newTitle === title) {
               hitEl.textContent = title.slice(0, 20)
@@ -296,6 +298,7 @@ export class ABReplacer_Widget extends WidgetType {
             activeEmbedHandle = null
             embedEditing = false
             disarmOutsideExit()
+            restoreMainEditorContext(plugin.app, prevActiveEditor, null, view)
             hitEl.textContent = title.slice(0, 20)
           },
         })
@@ -320,6 +323,7 @@ export class ABReplacer_Widget extends WidgetType {
         value: editValue,
         clickCoords: { x: clientX, y: clientY },
         escapeToCancel: true,
+        hostEditorView: view,
         onCancel: () => {
           activeEmbedHandle = null
           embedEditing = false
