@@ -346,6 +346,11 @@ export class C2ListProcess{
     C2ListProcess.pendingTabActivateIndex = index
   }
 
+  /** 未消费的待激活下标（不清除；用于避免写回时覆盖外部点击指定的页） */
+  static peekPendingTabActivateIndex(): number | null {
+    return C2ListProcess.pendingTabActivateIndex
+  }
+
   static consumePendingTabActivateIndex(): number | null {
     const v = C2ListProcess.pendingTabActivateIndex
     C2ListProcess.pendingTabActivateIndex = null

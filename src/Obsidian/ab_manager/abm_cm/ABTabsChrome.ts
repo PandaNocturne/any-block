@@ -20,6 +20,14 @@ export interface ABTabsChromeOptions {
   force?: boolean
 }
 
+/** 当前打开的标签右键菜单（全局单例，避免叠开且关不掉） */
+let activeTabMenu: Menu | null = null
+
+export function hideABTabsMenu() {
+  try { activeTabMenu?.hide() } catch (_) { /* ignore */ }
+  activeTabMenu = null
+}
+
 /**
  * 为 .ab-tab-root 挂上交互控件（默认幂等；force 时可重绑）
  */
@@ -47,6 +55,7 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
   addBtn.onclick = (e) => {
     e.preventDefault()
     e.stopPropagation()
+    hideABTabsMenu()
     const count = navItems().length
     onCommit((pairs) => {
       return [...pairs, { title: t("New tab"), body: "" }]
@@ -66,7 +75,13 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
 
     let dragging = false
 
+    // 左键按下时关掉菜单（块内 click 被捕获拦截，Menu 收不到 document 冒泡）
+    item.addEventListener("mousedown", (e: MouseEvent) => {
+      if (e.button === 0) hideABTabsMenu()
+    }, true)
+
     item.addEventListener("dragstart", (e: DragEvent) => {
+      hideABTabsMenu()
       const idx = parseInt(item.getAttribute("data-ab-item-index") || "-1", 10)
       if (idx < 0) {
         e.preventDefault()
@@ -137,7 +152,9 @@ export function enhanceABTabsChrome(opts: ABTabsChromeOptions) {
       if (idx < 0) return
       const title = item.getAttribute("data-ab-item-title") ?? item.textContent ?? ""
 
+      hideABTabsMenu()
       const menu = new Menu()
+      activeTabMenu = menu
       menu.addItem((mi) => {
         mi.setTitle(t("Tab rename"))
         mi.onClick(() => {

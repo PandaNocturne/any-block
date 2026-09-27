@@ -10,7 +10,7 @@ import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
 import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, type ABEmbedEditorHandle } from './ABEmbedEditor'
-import { enhanceABTabsChrome } from './ABTabsChrome'
+import { enhanceABTabsChrome, hideABTabsMenu } from './ABTabsChrome'
 import type { C2ListPair } from "@/ABConverter/converter/abc_c2list"
 
 export class ABReplacer_Widget extends WidgetType {
@@ -356,9 +356,12 @@ export class ABReplacer_Widget extends WidgetType {
             return
           }
           if (isTabContent) {
-            C2ListProcess.setPendingTabActivateIndex(
-              C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
-            )
+            // 外部已点到其他标签时保留其 pending，勿覆盖
+            if (C2ListProcess.peekPendingTabActivateIndex() == null) {
+              C2ListProcess.setPendingTabActivateIndex(
+                C2ListProcess.getActiveTabIndex(dom_note, itemIndex)
+              )
+            }
           }
           save(newFull, true)
         },
@@ -372,13 +375,15 @@ export class ABReplacer_Widget extends WidgetType {
       }
     }
 
-    // 捕获：挡住 CM 落点；Alt+点击立即编辑；双击用合成识别
+    // 捕获：挡住 CM 落点；单击切 tab；Alt+点击 / 双击进入嵌入编辑
+    // 注意：标签页 mousedown 不可 preventDefault，否则 HTML5 拖拽无法开始；右键不可 preventDefault，否则 contextmenu 异常
     const onEmbedPointerDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null
       if (!isEmbedHitTarget(t)) return
 
       // 工具栏 / 添加按钮：编辑中则先退出
       if (t?.closest?.(".ab-button, .ab-tab-nav-add")) {
+        hideABTabsMenu()
         if (embedEditing && !isInsideActiveEmbed(t)) exitEmbedOnOutside()
         return
       }
@@ -389,11 +394,65 @@ export class ABReplacer_Widget extends WidgetType {
         return
       }
 
+      // 右键：只挡 CM，交给 contextmenu；顺带收起已打开的菜单（避免叠开）
+      if (e.button !== 0) {
+        e.stopPropagation()
+        return
+      }
+
+      hideABTabsMenu()
+
+      const tabNav = t?.closest?.(".ab-tab-nav-item") as HTMLElement | null
+      const tabRoot = tabNav?.closest?.(".ab-tab-root") as HTMLElement | null
+      const tabIdx = tabNav
+        ? parseInt(tabNav.getAttribute("data-ab-item-index") || "-1", 10)
+        : -1
+
+      // 标签页：只 stopPropagation，不 preventDefault（保留拖拽）
+      if (tabNav && tabRoot && tabIdx >= 0) {
+        e.stopPropagation()
+
+        if (embedEditing) {
+          lastEmbedTap = null
+          C2ListProcess.setPendingTabActivateIndex(tabIdx)
+          exitEmbedOnOutside()
+          if (tabRoot.isConnected) {
+            C2ListProcess.activateTabIndex(tabRoot, tabIdx)
+            C2ListProcess.setPendingTabActivateIndex(null)
+          }
+          return
+        }
+
+        // Alt / 双击进入嵌入编辑；单击切换
+        if (e.altKey && isEmbedEditEnabled()) {
+          e.preventDefault()
+          lastEmbedTap = null
+          startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+          return
+        }
+
+        const key = `${tabIdx}:t`
+        const now = Date.now()
+        const isDouble =
+          isEmbedEditEnabled()
+          && lastEmbedTap
+          && lastEmbedTap.key === key
+          && now - lastEmbedTap.at < 550
+
+        if (isDouble) {
+          e.preventDefault()
+          lastEmbedTap = null
+          startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+        } else {
+          C2ListProcess.activateTabIndex(tabRoot, tabIdx)
+          lastEmbedTap = isEmbedEditEnabled() ? { key, at: now } : null
+        }
+        return
+      }
+
+      // 非标签区域：挡 CM 落点
       e.stopPropagation()
       e.preventDefault()
-
-      if (!isEmbedEditEnabled()) return
-      if (e.button !== 0) return
 
       // 编辑中点外部：主动提交退出（preventDefault 会阻止原生 blur）
       if (embedEditing) {
@@ -401,6 +460,8 @@ export class ABReplacer_Widget extends WidgetType {
         exitEmbedOnOutside()
         return
       }
+
+      if (!isEmbedEditEnabled()) return
 
       const hit = resolveEmbedHit(t!)
       if (!hit) {
