@@ -1,11 +1,16 @@
-import type {MarkdownPostProcessorContext} from "obsidian"
-import{
+import type { Editor, MarkdownPostProcessorContext } from "obsidian"
+import {
   sanitizeHTMLToDom,
+  MarkdownView,
+  Notice,
 } from "obsidian";
+import type { EditorView } from "@codemirror/view"
 import { ABConvertManager } from "@/ABConverter/ABConvertManager";
 import { abConvertEvent } from "@/ABConverter/ABConvertEvent";
 import { ABCSetting, ABReg } from "@/ABConverter/ABSetting";
 import { ABReplacer_Widget } from "../abm_cm/ABReplacer_Widget";
+import { isC2EmbedRenderable, wireABEmbedC2Host } from "../abm_cm/ABEmbedC2Host";
+import { getEmbedEditPlugin } from "../abm_cm/ABEmbedEditor";
 
 export class ABReplacer_CodeBlock{
   static processor(
@@ -18,13 +23,6 @@ export class ABReplacer_CodeBlock{
 
     const root_div = document.createElement("div");  blockEl.appendChild(root_div); root_div.classList.add("ab-replace");
     const list_src = src.split("\n")
-
-    // 判断当前是实时还是阅读模式、判断处于重渲染中的还是阅读模式渲染的
-    // (可以通过ctx来判断)
-    // ts-ignore 类型“MarkdownPostProcessorContext”上不存在属性“containerEl”
-    // if (!ctx.containerEl?.classList.contains("cm-scroller")) {
-    //   console.log("rerender-env")
-    // }
 
     // 判断是否AnyBlock块
     let header: string = ""
@@ -54,9 +52,7 @@ export class ABReplacer_CodeBlock{
     if (header != "") { // b1. 规范的AnyBlock
       ABConvertManager.autoABConvert(dom_replaceEl, header, src_without_indent)
     }
-    else { // b2. 非法内容，普通渲染处理 (还是说代码渲染会更好？主要是普通渲染便于对render接口进行调试，比较方便)
-      // const mdrc: MarkdownRenderChild = new MarkdownRenderChild(dom_replaceEl); ctx.addChild(mdrc);
-      // MarkdownRenderer.render(app, src, dom_replaceEl, app.workspace.getActiveViewOfType(MarkdownView)?.file?.path??"", mdrc);
+    else { // b2. 非法内容，普通渲染处理
       ABConvertManager.getInstance().m_renderMarkdownFn(src, dom_replaceEl, ctx)
     }
 
@@ -79,5 +75,110 @@ export class ABReplacer_CodeBlock{
     dom_note.onmouseout = button_hide
     dom_edit.onmouseover = button_show
     dom_edit.onmouseout = button_hide
+
+    // codeblock 模式：card / col / tabs 内联编辑 + tabs chrome
+    if (header !== "" && isC2EmbedRenderable(dom_note)) {
+      ABReplacer_CodeBlock.wireEmbedIfPossible(
+        dom_note,
+        blockEl,
+        ctx,
+        header,
+        src_without_indent,
+        header_indent_prefix,
+        src,
+      )
+    }
+  }
+
+  /**
+   * 将 fence 内正文（含 `[header]` 行）与编辑器 SectionInfo 对齐后挂载内联编辑
+   */
+  private static wireEmbedIfPossible(
+    dom_note: HTMLElement,
+    blockEl: HTMLElement,
+    ctx: MarkdownPostProcessorContext,
+    header: string,
+    contentWithoutIndent: string,
+    indentPrefix: string,
+    fallbackSrcWithIndent: string,
+  ) {
+    const buildFullSrcFromParts = (content: string) => {
+      // 与列表选择器 Widget 一致：`[header]\ncontent`
+      const headLine = fallbackSrcWithIndent.split("\n")[0] ?? `[${header}]`
+      const headTrimmed = indentPrefix && headLine.startsWith(indentPrefix)
+        ? headLine.substring(indentPrefix.length)
+        : headLine
+      return content.length ? `${headTrimmed}\n${content}` : headTrimmed
+    }
+
+    const initialFullSrc = buildFullSrcFromParts(contentWithoutIndent)
+
+    const getEditor = (): Editor | null => {
+      const plugin = getEmbedEditPlugin()
+      const app = plugin?.app
+      if (!app) return null
+      const mv = app.workspace.getActiveViewOfType(MarkdownView)
+      return mv?.editor ?? null
+    }
+
+    const getHostEditorView = (): EditorView | null => {
+      const ed = getEditor() as any
+      return (ed?.cm as EditorView | undefined) ?? null
+    }
+
+    /** 读取 fence 内正文（去公共缩进），失败则回退缓存 */
+    const readFenceInner = (): string | null => {
+      const editor = getEditor()
+      const section = ctx.getSectionInfo(blockEl)
+      if (!editor || !section) return null
+      const { lineStart, lineEnd } = section
+      if (lineEnd <= lineStart + 1) return ""
+      const lines: string[] = []
+      for (let i = lineStart + 1; i < lineEnd; i++) {
+        let line = editor.getLine(i)
+        if (indentPrefix && line.startsWith(indentPrefix)) {
+          line = line.substring(indentPrefix.length)
+        }
+        lines.push(line)
+      }
+      return lines.join("\n")
+    }
+
+    const getFullSrc = (): string | null => {
+      const inner = readFenceInner()
+      if (inner != null) return inner
+      return initialFullSrc
+    }
+
+    const saveFullSrc = (fullSrc: string) => {
+      const editor = getEditor()
+      const section = ctx.getSectionInfo(blockEl)
+      if (!editor || !section) {
+        new Notice("写入失败：无法定位代码块位置")
+        return
+      }
+      const { lineStart, lineEnd } = section
+      const openLine = editor.getLine(lineStart)
+      const closeLine = editor.getLine(lineEnd)
+      const innerLines = fullSrc.length
+        ? fullSrc.split("\n").map((l) => indentPrefix + l)
+        : []
+      const text = [openLine, ...innerLines, closeLine].join("\n")
+      editor.replaceRange(
+        text,
+        { line: lineStart, ch: 0 },
+        { line: lineEnd, ch: closeLine.length },
+      )
+    }
+
+    wireABEmbedC2Host({
+      domNote: dom_note,
+      getFullSrc,
+      saveFullSrc,
+      header,
+      cachedContent: contentWithoutIndent,
+      hostEditorView: getHostEditorView(),
+      enableTabsChrome: true,
+    })
   }
 }
