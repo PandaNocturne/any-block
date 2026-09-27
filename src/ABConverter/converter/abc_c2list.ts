@@ -400,15 +400,25 @@ export class C2ListProcess{
   static c2data2items(c2listdata:List_C2ListItem, el:HTMLElement): HTMLElement {
     const el_items = document.createElement("div"); el.appendChild(el_items); el_items.classList.add("ab-items")
     let el_item:HTMLElement|null = null;
+    let card_index = -1
+    let pending_title = ""
     for (const item of c2listdata) {
       // b1. item标题
       if (item.level == 0) {
+        // 上一张卡若无 body，补空 body 标记
+        if (el_item && !el_item.hasAttribute("data-ab-card-body")) {
+          el_item.setAttribute("data-ab-card-body", "")
+        }
+        card_index++
         el_item = document.createElement("div"); el_items.appendChild(el_item); el_item.classList.add("ab-items-item")
+        el_item.setAttribute("data-ab-card-index", String(card_index))
+        el_item.setAttribute("data-ab-card-title", item.content)
         const el_title = document.createElement("div"); el_item.appendChild(el_title); el_title.classList.add("ab-items-title")
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_title)
       }
       // b2. item内容
       else if (el_item) {
+        el_item.setAttribute("data-ab-card-body", item.content)
         const el_content = document.createElement("div"); el_item.appendChild(el_content); el_content.classList.add("ab-items-content")
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_content)
       }
@@ -417,7 +427,29 @@ export class C2ListProcess{
         continue
       }
     }
+    if (el_item && !el_item.hasAttribute("data-ab-card-body")) {
+      el_item.setAttribute("data-ab-card-body", "")
+    }
     return el
+  }
+
+  /**
+   * 二列列表数据序列化为列表 md（与 list2c2data 互逆，用于嵌入编辑写回）
+   */
+  static c2data2list(c2listdata: List_C2ListItem): string {
+    let out = ""
+    for (const item of c2listdata) {
+      if (item.level === 0) {
+        out += `- ${item.content}\n`
+      } else {
+        const body = item.content.replace(/\n$/, "")
+        if (body.trim() === "") continue
+        for (const line of body.split("\n")) {
+          out += `  ${line}\n`
+        }
+      }
+    }
+    return out.replace(/\n$/, "")
   }
 }
 

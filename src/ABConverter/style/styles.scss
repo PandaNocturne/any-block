@@ -173,6 +173,42 @@ html[data-theme="dark"] #app {
   &>.ab-note{
     position: relative;
     /*padding: 24px 12px 12px 12px;*/
+
+    // 嵌入编辑（双击单张卡片）
+    .ab-items-item.ab-embed-editor {
+      min-height: 4em;
+      border: 1px solid var(--interactive-accent);
+      border-radius: 6px;
+      padding: 4px 8px;
+      background-color: var(--background-primary);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+
+      .ab-embed-editor-inner {
+        min-height: 3em;
+      }
+
+      .cm-editor {
+        background: transparent;
+      }
+    }
+
+    // 嵌入编辑（旧：整块 .ab-note，保留兼容）
+    &.ab-embed-editor {
+      min-height: 4em;
+      border: 1px solid var(--interactive-accent);
+      border-radius: 6px;
+      padding: 4px 8px;
+      background-color: var(--background-primary);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+
+      .ab-embed-editor-inner {
+        min-height: 3em;
+      }
+
+      .cm-editor {
+        background: transparent;
+      }
+    }
   }
 
   &>.ab-button{

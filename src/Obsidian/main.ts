@@ -18,6 +18,7 @@ import { ABConvertManager, ABCSetting } from "@/ABConverter/index"
 
 import { ABReplacer_CodeBlock } from "./ab_manager/abm_code/ABReplacer_CodeBlock"
 import { ABStateManager, global_timer } from "./ab_manager/abm_cm/ABStateManager"
+import { getObsidianMarkdownEditorClass, setEmbedEditPlugin, setMarkdownEditorClass } from "./ab_manager/abm_cm/ABEmbedEditor"
 import { ABSelector_PostHtml } from "./ab_manager/abm_html/ABSelector_PostHtml"
 import { registerCommands, registerStatus } from './utils'
 import { ABSettingTab, AB_SETTINGS, type ABSettingInterface } from "./config/ABSettingTab"
@@ -31,10 +32,20 @@ export default class AnyBlockPlugin extends Plugin {
     ABCSetting.state.language = getLanguage()
     await this.loadSettings();
     this.addSettingTab(new ABSettingTab(this.app, this))
+    setEmbedEditPlugin(this)
 
     // 添加 obsidian 命令和UI元素
     registerStatus(this)
     registerCommands(this)
+
+    // 取出内部 MarkdownEditor（需在 layout ready 后，embedRegistry 才可用）
+    this.app.workspace.onLayoutReady(() => {
+      try {
+        setMarkdownEditorClass(getObsidianMarkdownEditorClass(this.app))
+      } catch (e) {
+        console.warn("[AnyBlock] 初始化嵌入编辑器失败:", e)
+      }
+    })
 
     // 适配 - 将ob的渲染行为传入回调函数 (目的是将转换器和Obsidian相解耦合)
     ABConvertManager.getInstance().redefine_renderMarkdown((markdown: string, el: HTMLElement, ctx?: MarkdownPostProcessorContext): void => {

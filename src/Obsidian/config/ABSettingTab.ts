@@ -42,6 +42,7 @@ export interface ABSettingInterface {
   // 其他
   is_debug: boolean,                // 是否开启调试打印
   reading_auto_refresh: boolean,    // 阅读模式下内容变更时是否自动强制刷新 (rebuildView)，默认开启；内置冷却以防自引用嵌入无限刷新
+  embed_edit: boolean,              // 编辑模式下双击渲染块进入嵌入编辑（参考 kanban），默认关闭
   enhance_refresh_time: number,     // 刷新增强的刷新时间 (ms) (<1000为关闭，最快1s)
   reg_header: string,               // 正则 - square brackets
   reg_header_noprefix: string,
@@ -98,6 +99,7 @@ export const AB_SETTINGS: ABSettingInterface = {
 
   is_debug: false,
   reading_auto_refresh: true,
+  embed_edit: false,
   enhance_refresh_time: 2000,
   reg_header: ABReg.reg_header.toString(), // 举例: 可将 .* 修改成 (?:[^:]*) 以排除 [] 中有 : 情况
   reg_header_noprefix: ABReg.reg_header_noprefix.toString(), // 两个都要改
@@ -330,6 +332,16 @@ export class ABSettingTab extends PluginSettingTab {
             // @ts-expect-error WorkspaceLeaf 上存在 rebuildView
             leaf.rebuildView?.()
           })
+        })
+      )
+    new Setting(ab_tab_content_item)
+      .setName(t("Embed edit"))
+      .setDesc(t("Embed edit2"))
+      .addToggle(toggle => toggle
+        .setValue(settings.embed_edit)
+        .onChange(async (value) => {
+          settings.embed_edit = value
+          await this.plugin.saveSettings()
         })
       )
     new Setting(ab_tab_content_item)

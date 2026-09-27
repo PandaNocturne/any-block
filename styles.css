@@ -145,6 +145,23 @@ html[data-theme=dark] #app {
   position: relative;
   /*padding: 24px 12px 12px 12px;*/
 }
+.ab-replace .ab-items-item.ab-embed-editor,
+.ab-replace > .ab-note.ab-embed-editor {
+  min-height: 4em;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background-color: var(--background-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+}
+.ab-replace .ab-items-item.ab-embed-editor .ab-embed-editor-inner,
+.ab-replace > .ab-note.ab-embed-editor .ab-embed-editor-inner {
+  min-height: 3em;
+}
+.ab-replace .ab-items-item.ab-embed-editor .cm-editor,
+.ab-replace > .ab-note.ab-embed-editor .cm-editor {
+  background: transparent;
+}
 .ab-replace > .ab-button {
   box-sizing: border-box;
   position: absolute;

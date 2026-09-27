@@ -83,6 +83,8 @@ export default {
   'Reading auto refresh2': '阅读模式下内容变更时是否自动强制刷新整页，避免未改动的 AnyBlock 效果丢失。默认开启；若遇自引用嵌入导致反复刷新可关闭，或使用状态栏「刷新视图」手动刷新',
   'Edit mode render': '编辑模式渲染',
   'Edit mode render2': '开启后在「实时预览」中渲染 AnyBlock；关闭后实时预览也不渲染。源码模式始终不渲染（仅显示原文）',
+  'Embed edit': '嵌入编辑',
+  'Embed edit2': '开启后，在实时预览中双击单张渲染卡片，可就地用 Obsidian 编辑器修改该卡片（非整块）。默认关闭。首行=标题，其余=正文；Esc / Ctrl+Enter / 失焦提交',
   'Submit': '提交',
   'Edit': '编辑',
   'Refresh': '刷新',
