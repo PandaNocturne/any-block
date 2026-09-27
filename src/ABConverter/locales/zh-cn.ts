@@ -78,6 +78,9 @@ export default {
   'License Expiry': '许可证到期时间，到期时间的显示需要重新打开设置面板来更新',
 
   // General
+  'General': '其他',
+  'Reading auto refresh': '是否自动刷新',
+  'Reading auto refresh2': '阅读模式下内容变更时是否自动强制刷新整页。默认关闭，可避免界面反复刷新；若从实时模式切换回阅读模式后部分 AnyBlock 未更新，可临时开启或使用状态栏「刷新视图」',
   'Submit': '提交',
   'Edit': '编辑',
   'Refresh': '刷新',

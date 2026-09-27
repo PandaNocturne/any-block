@@ -78,6 +78,9 @@ By adopting a dual-licensing mechanism, a certain period of default free license
   'License Expiry': 'License Expiry. The display of expiration time needs to be updated by reopening the settings panel.',
 
   // General
+  'General': 'General',
+  'Reading auto refresh': 'Auto refresh (Reading mode)',
+  'Reading auto refresh2': 'Force rebuild the reading view when content changes. Off by default to avoid endless refreshes. If some AnyBlocks are stale after switching from live preview, enable this temporarily or use the status-bar rebuild command.',
   'Submit': 'Submit',
   'Edit': 'Edit',
   'Refresh': 'Refresh',

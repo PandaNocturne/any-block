@@ -41,6 +41,7 @@ export interface ABSettingInterface {
 
   // 其他
   is_debug: boolean,                // 是否开启调试打印
+  reading_auto_refresh: boolean,    // 阅读模式下内容变更时是否自动强制刷新 (rebuildView)，默认关闭以避免无限刷新
   enhance_refresh_time: number,     // 刷新增强的刷新时间 (ms) (<1000为关闭，最快1s)
   reg_header: string,               // 正则 - square brackets
   reg_header_noprefix: string,
@@ -96,6 +97,7 @@ export const AB_SETTINGS: ABSettingInterface = {
   }],
 
   is_debug: false,
+  reading_auto_refresh: false,
   enhance_refresh_time: 2000,
   reg_header: ABReg.reg_header.toString(), // 举例: 可将 .* 修改成 (?:[^:]*) 以排除 [] 中有 : 情况
   reg_header_noprefix: ABReg.reg_header_noprefix.toString(), // 两个都要改
@@ -307,6 +309,22 @@ export class ABSettingTab extends PluginSettingTab {
           }).open()
         })
       })
+    // #endregion
+
+    // #region 其他设置
+    ab_tab_nav_item = el_tab_nav.createEl('button', {cls: 'ab-tab-nav-item', text: t("General")})
+    ab_tab_content_item = el_tab_content.createEl('div', {cls: 'ab-tab-content-item'})
+    new Setting(ab_tab_content_item).setName(t("General")).setHeading();
+    new Setting(ab_tab_content_item)
+      .setName(t("Reading auto refresh"))
+      .setDesc(t("Reading auto refresh2"))
+      .addToggle(toggle => toggle
+        .setValue(settings.reading_auto_refresh)
+        .onChange(async (value) => {
+          settings.reading_auto_refresh = value;
+          await this.plugin.saveSettings()
+        })
+      )
     // #endregion
 
     // TODO 添加json编辑器而非文本编辑json

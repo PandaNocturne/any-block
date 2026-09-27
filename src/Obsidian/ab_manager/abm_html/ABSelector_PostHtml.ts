@@ -183,7 +183,8 @@ export class ABSelector_PostHtml{
       // 如果没有这个，如果从阅读模式切换回实时模式，并只修改一部分内容再切换回阅读模式，那么 `ABPosthtmlManager.processor, called by 'ReadMode'` 只会识别到那些有改动的块，其他不再走这里
       // 本来想用旧版的 `is_onlyPart`，但不准的。因为开头片段被修改过，则判断不了，然后想象还是用回 `is_newContent` 作为判断依据
       // TODO 这里存在改进的空间，如果这里触发了实际上会渲染 n+m 次，n是受影响的div，m是全文的div。前者这里可以弄个flag来消除掉，没必要进行
-      if (!is_subContent && is_newContent) {
+      // 默认关闭：部分场景（如自引用嵌入）会导致阅读模式无限 rebuildView；需要时可在设置中开启
+      if (this.settings.reading_auto_refresh && !is_subContent && is_newContent) {
         // 性能优化：如果不包含ab块，那就不强制刷新，以免影响正常页面
         if (cache_item && (
           /((\s|>\s|-\s|\*\s|\+\s)*)(%%)?(\[((?!toc)(?!TOC)[0-9a-zA-Z\u4e00-\u9fa5].*)\]):?(%%)?\s*\n/.test(cache_item.content) ||
