@@ -314,6 +314,24 @@ export class C2ListProcess{
   }
 
   /**
+   * 给可嵌入编辑的条目打标（卡片 / 标签页 / 时间线等共用）
+   */
+  static stampEmbedItemAttrs(
+    el: HTMLElement,
+    index: number,
+    title: string,
+    body: string,
+  ) {
+    el.setAttribute("data-ab-item-index", String(index))
+    el.setAttribute("data-ab-item-title", title)
+    el.setAttribute("data-ab-item-body", body)
+    // 兼容旧卡片属性名
+    el.setAttribute("data-ab-card-index", String(index))
+    el.setAttribute("data-ab-card-title", title)
+    el.setAttribute("data-ab-card-body", body)
+  }
+
+  /**
    * 两列列表数据转标签栏
    */
   static c2data2tab(
@@ -326,21 +344,31 @@ export class C2ListProcess{
     const nav = document.createElement("div"); tab.appendChild(nav); nav.classList.add("ab-tab-nav");
     const content = document.createElement("div"); tab.appendChild(content); content.classList.add("ab-tab-content")
     let current_dom:HTMLElement|null = null
+    let pending_title = ""
+    let item_index = -1
     for (let i=0; i<list_itemInfo.length; i++){
       const item = list_itemInfo[i]
       // b1. item标题，顺便创建空内容
       if (item.level==0) {
+        item_index++
+        pending_title = item.content
         const nav_item = document.createElement("button"); nav.appendChild(nav_item); nav_item.classList.add("ab-tab-nav-item");
           nav_item.setAttribute("is_activate", i==0?"true":"false");
           nav_item.setAttribute("data_index", i.toString()); // data_index 用于方便从数组中删除
           nav_item.textContent = item.content.slice(0,20);
+          C2ListProcess.stampEmbedItemAttrs(nav_item, item_index, item.content, "")
 
         current_dom = document.createElement("div"); content.appendChild(current_dom); current_dom.classList.add("ab-tab-content-item");
           current_dom.setAttribute("style", i==0?"display:block":"display:none"); current_dom.setAttribute("is_activate", i==0?"true":"false");
+          C2ListProcess.stampEmbedItemAttrs(current_dom, item_index, item.content, "")
       }
       // b2. item内容，在空内容的基础上填充
       else if (current_dom) {
         current_dom.setAttribute("data_index", i.toString()); // data_index 用于方便从数组中删除
+        C2ListProcess.stampEmbedItemAttrs(current_dom, item_index, pending_title, item.content)
+        // 同步到对应 nav
+        const nav_item = nav.querySelector(`:scope > .ab-tab-nav-item[data-ab-item-index="${item_index}"]`) as HTMLElement | null
+        if (nav_item) C2ListProcess.stampEmbedItemAttrs(nav_item, item_index, pending_title, item.content)
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, current_dom)
         current_dom = null
       }
@@ -401,24 +429,32 @@ export class C2ListProcess{
     const el_items = document.createElement("div"); el.appendChild(el_items); el_items.classList.add("ab-items")
     let el_item:HTMLElement|null = null;
     let card_index = -1
-    let pending_title = ""
     for (const item of c2listdata) {
       // b1. item标题
       if (item.level == 0) {
         // 上一张卡若无 body，补空 body 标记
-        if (el_item && !el_item.hasAttribute("data-ab-card-body")) {
-          el_item.setAttribute("data-ab-card-body", "")
+        if (el_item && !el_item.hasAttribute("data-ab-item-body")) {
+          C2ListProcess.stampEmbedItemAttrs(
+            el_item,
+            parseInt(el_item.getAttribute("data-ab-item-index") || "0", 10),
+            el_item.getAttribute("data-ab-item-title") || "",
+            ""
+          )
         }
         card_index++
         el_item = document.createElement("div"); el_items.appendChild(el_item); el_item.classList.add("ab-items-item")
-        el_item.setAttribute("data-ab-card-index", String(card_index))
-        el_item.setAttribute("data-ab-card-title", item.content)
+        C2ListProcess.stampEmbedItemAttrs(el_item, card_index, item.content, "")
         const el_title = document.createElement("div"); el_item.appendChild(el_title); el_title.classList.add("ab-items-title")
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_title)
       }
       // b2. item内容
       else if (el_item) {
-        el_item.setAttribute("data-ab-card-body", item.content)
+        C2ListProcess.stampEmbedItemAttrs(
+          el_item,
+          card_index,
+          el_item.getAttribute("data-ab-item-title") || "",
+          item.content
+        )
         const el_content = document.createElement("div"); el_item.appendChild(el_content); el_content.classList.add("ab-items-content")
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_content)
       }
@@ -427,8 +463,13 @@ export class C2ListProcess{
         continue
       }
     }
-    if (el_item && !el_item.hasAttribute("data-ab-card-body")) {
-      el_item.setAttribute("data-ab-card-body", "")
+    if (el_item && !el_item.hasAttribute("data-ab-item-body")) {
+      C2ListProcess.stampEmbedItemAttrs(
+        el_item,
+        parseInt(el_item.getAttribute("data-ab-item-index") || "0", 10),
+        el_item.getAttribute("data-ab-item-title") || "",
+        ""
+      )
     }
     return el
   }
@@ -447,6 +488,24 @@ export class C2ListProcess{
         for (const line of body.split("\n")) {
           out += `  ${line}\n`
         }
+      }
+    }
+    return out.replace(/\n$/, "")
+  }
+
+  /**
+   * 二列列表数据序列化为标题大纲 md（与 title2c2data 互逆）
+   */
+  static c2data2title(c2listdata: List_C2ListItem, headingLevel = 1): string {
+    const hashes = "#".repeat(Math.max(1, Math.min(6, headingLevel)))
+    let out = ""
+    for (const item of c2listdata) {
+      if (item.level === 0) {
+        out += `${hashes} ${item.content}\n`
+      } else {
+        const body = item.content.replace(/\n$/, "")
+        if (body.trim() === "") continue
+        out += body + "\n"
       }
     }
     return out.replace(/\n$/, "")

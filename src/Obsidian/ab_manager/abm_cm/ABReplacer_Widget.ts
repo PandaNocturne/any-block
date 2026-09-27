@@ -133,14 +133,16 @@ export class ABReplacer_Widget extends WidgetType {
 
     if (!this.global_editor) return this.div // 非有效的实时编辑环境
 
-    // 嵌入编辑：双击「单张卡片」就地编辑（非整块 AnyBlock；设置默认关闭）
+    // 嵌入编辑：双击单个条目（卡片 / 分栏项 / 标签页 / 时间线行）就地编辑；设置默认关闭
     let embedEditing = false
     dom_note.addEventListener("dblclick", (e: MouseEvent) => {
       if (!isEmbedEditEnabled() || embedEditing) return
       if ((e.target as HTMLElement)?.closest?.(".ab-button")) return
 
-      const cardEl = (e.target as HTMLElement)?.closest?.(".ab-items-item") as HTMLElement | null
-      if (!cardEl || !dom_note.contains(cardEl)) return // 仅卡片项，非整块
+      const itemEl = (e.target as HTMLElement)?.closest?.(
+        ".ab-items-item, .ab-tab-content-item, .ab-tab-nav-item, tr[data-ab-item-index]"
+      ) as HTMLElement | null
+      if (!itemEl || !dom_note.contains(itemEl)) return
 
       e.preventDefault()
       e.stopPropagation()
@@ -148,24 +150,42 @@ export class ABReplacer_Widget extends WidgetType {
       const plugin = getEmbedEditPlugin()
       if (!plugin || !this.global_editor) return
 
-      const cardIndex = parseInt(cardEl.getAttribute("data-ab-card-index") || "-1", 10)
-      if (cardIndex < 0) return
+      const itemIndex = parseInt(
+        itemEl.getAttribute("data-ab-item-index")
+          || itemEl.getAttribute("data-ab-card-index")
+          || "-1",
+        10
+      )
+      if (itemIndex < 0) return
 
-      const title = cardEl.getAttribute("data-ab-card-title") ?? ""
-      const body = cardEl.getAttribute("data-ab-card-body") ?? ""
-      // 编辑缓冲：首行标题，其余为正文（与 list2card 的 title/body 对应）
+      const title = itemEl.getAttribute("data-ab-item-title")
+        ?? itemEl.getAttribute("data-ab-card-title")
+        ?? ""
+      const body = itemEl.getAttribute("data-ab-item-body")
+        ?? itemEl.getAttribute("data-ab-card-body")
+        ?? ""
+      // 编辑缓冲：首行标题，其余为正文
       const editValue = body.trim() === "" ? title : `${title}\n${body.replace(/\n$/, "")}`
+
+      // 标签页：优先在内容面板上编辑（避免按钮上打开编辑器体验差）
+      let editContainer = itemEl
+      if (itemEl.classList.contains("ab-tab-nav-item")) {
+        const tabRoot = itemEl.closest(".ab-tab-root")
+        const contentItem = tabRoot?.querySelector(
+          `.ab-tab-content-item[data-ab-item-index="${itemIndex}"]`
+        ) as HTMLElement | null
+        if (contentItem) editContainer = contentItem
+      }
 
       const from = this.global_editor.offsetToPos(this.rangeSpec.from_ch)
       const to = this.global_editor.offsetToPos(this.rangeSpec.to_ch)
       const fullSrc = this.global_editor.getRange(from, to)
 
       embedEditing = true
-      // 用卡片 DOM 作为编辑容器，不影响其他卡片
       const handle = openABEmbedEditor({
         plugin,
         app: plugin.app,
-        containerEl: cardEl,
+        containerEl: editContainer,
         file: (plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file) ?? null,
         value: editValue,
         clickCoords: { x: e.clientX, y: e.clientY },
@@ -173,17 +193,16 @@ export class ABReplacer_Widget extends WidgetType {
           embedEditing = false
           const trimmed = newText.replace(/\n$/, "")
           if (trimmed === editValue.replace(/\n$/, "")) {
-            // 未改动：恢复该卡片渲染
-            this.rerenderSingleCard(cardEl, title, body)
+            this.restoreEmbedItemView(dom_note)
             return
           }
           const lines = trimmed.split("\n")
           const newTitle = (lines[0] ?? "").trim() || title
           const newBody = lines.slice(1).join("\n")
-          const newFull = this.patchCardInBlockSource(fullSrc, cardIndex, newTitle, newBody)
+          const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, newTitle, newBody)
           if (newFull == null) {
-            new Notice("写入卡片失败：无法解析列表结构")
-            this.rerenderSingleCard(cardEl, title, body)
+            new Notice("写入失败：无法解析条目结构")
+            this.restoreEmbedItemView(dom_note)
             return
           }
           save(newFull, true)
@@ -293,31 +312,33 @@ export class ABReplacer_Widget extends WidgetType {
   }
 
   /**
-   * 将单张卡片的修改写回整块 AnyBlock 源码
-   * @returns 新的整块源码；解析失败返回 null
+   * 将单个 c2 条目（卡片/标签/时间线）的修改写回整块 AnyBlock 源码
+   * 自动识别列表源 / 标题源
    */
-  private patchCardInBlockSource(
+  private patchC2ItemInBlockSource(
     fullSrc: string,
-    cardIndex: number,
+    itemIndex: number,
     newTitle: string,
     newBody: string,
   ): string | null {
     const oldContent = this.rangeSpec.content
+    const isTitleSrc = this.isTitleC2Source(oldContent)
     let data: List_C2ListItem
     try {
-      data = C2ListProcess.list2c2data(oldContent)
+      data = isTitleSrc
+        ? C2ListProcess.title2c2data(oldContent)
+        : C2ListProcess.list2c2data(oldContent)
     } catch (_) {
       return null
     }
     if (!data.length) return null
 
-    // 定位第 cardIndex 个 level0，并更新其后紧邻的 level1
     let seen = -1
     let titleIdx = -1
     for (let i = 0; i < data.length; i++) {
       if (data[i].level === 0) {
         seen++
-        if (seen === cardIndex) {
+        if (seen === itemIndex) {
           titleIdx = i
           break
         }
@@ -338,30 +359,42 @@ export class ABReplacer_Widget extends WidgetType {
       data.splice(titleIdx + 1, 0, { content: bodyText, level: 1 })
     }
 
-    const newContent = C2ListProcess.c2data2list(data)
-    const idx = fullSrc.lastIndexOf(oldContent)
-    if (idx < 0) {
-      // 内容尾部换行差异时再试一次
-      const alt = oldContent.replace(/\n$/, "")
-      const idx2 = fullSrc.lastIndexOf(alt)
-      if (idx2 < 0) return null
-      return fullSrc.slice(0, idx2) + newContent + fullSrc.slice(idx2 + alt.length)
-    }
-    return fullSrc.slice(0, idx) + newContent + fullSrc.slice(idx + oldContent.length)
+    const newContent = isTitleSrc
+      ? C2ListProcess.c2data2title(data)
+      : C2ListProcess.c2data2list(data)
+    return this.replaceContentInFullSrc(fullSrc, oldContent, newContent)
   }
 
-  /** 未改动时恢复单张卡片的渲染 DOM */
-  private rerenderSingleCard(cardEl: HTMLElement, title: string, body: string) {
-    cardEl.empty()
-    cardEl.removeClass("ab-embed-editor")
-    cardEl.setAttribute("data-ab-card-title", title)
-    cardEl.setAttribute("data-ab-card-body", body)
-    const el_title = cardEl.createDiv({ cls: "ab-items-title" })
-    ABConvertManager.getInstance().m_renderMarkdownFn(title, el_title)
-    if (body.trim() !== "") {
-      const el_content = cardEl.createDiv({ cls: "ab-items-content" })
-      ABConvertManager.getInstance().m_renderMarkdownFn(body, el_content)
+  /** 判断内容是否为标题大纲源（title2card / title2tabs / title2timeline） */
+  private isTitleC2Source(content: string): boolean {
+    const first = content.trimStart().split("\n")[0] ?? ""
+    if (/^#{1,6}\s/.test(first)) return true
+    if (this.rangeSpec.selector === "heading") return true
+    if (/title2(card|col|tabs?|timeline)/i.test(this.rangeSpec.header)) return true
+    return false
+  }
+
+  private replaceContentInFullSrc(fullSrc: string, oldContent: string, newContent: string): string | null {
+    const idx = fullSrc.lastIndexOf(oldContent)
+    if (idx >= 0) {
+      return fullSrc.slice(0, idx) + newContent + fullSrc.slice(idx + oldContent.length)
     }
+    const alt = oldContent.replace(/\n$/, "")
+    const idx2 = fullSrc.lastIndexOf(alt)
+    if (idx2 < 0) return null
+    return fullSrc.slice(0, idx2) + newContent + fullSrc.slice(idx2 + alt.length)
+  }
+
+  /** 取消编辑时整体重渲染预览（兼容卡片/标签/时间线） */
+  private restoreEmbedItemView(dom_note: HTMLElement) {
+    dom_note.empty()
+    dom_note.removeClass("ab-embed-editor")
+    ABConvertManager.autoABConvert(
+      dom_note as HTMLDivElement,
+      this.rangeSpec.header,
+      this.rangeSpec.content,
+      this.rangeSpec.selector
+    )
   }
 
   /**

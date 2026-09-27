@@ -63,6 +63,7 @@ export class TableProcess{
   static list2timeline(text: string, div: HTMLDivElement, modeT=false) {
     let data = C2ListProcess.list2c2data(text)
     div = TableProcess.data2table(data, div, modeT)
+    TableProcess.stampTimelineEmbedAttrs(div, data)
     const table = div.querySelector("table")
     if (table) table.classList.add("ab-table-timeline", "ab-table-fc")
     return div 
@@ -72,9 +73,38 @@ export class TableProcess{
   static title2timeline(text: string, div: HTMLDivElement, modeT=false) {
     let data = C2ListProcess.title2c2data(text)
     div = TableProcess.data2table(data, div, modeT)
+    TableProcess.stampTimelineEmbedAttrs(div, data)
     const table = div.querySelector("table")
     if (table) table.classList.add("ab-table-timeline", "ab-table-fc")
     return div 
+  }
+
+  /** 为时间线每一行打上嵌入编辑标记（一行 = 一个 c2 条目） */
+  static stampTimelineEmbedAttrs(div: HTMLDivElement, data: List_C2ListItem) {
+    const table = div.querySelector("table")
+    if (!table) return
+    const rows = table.querySelectorAll("tbody > tr, thead > tr")
+    let item_index = -1
+    let pending_title = ""
+    let pending_body = ""
+    let row_i = 0
+    for (const item of data) {
+      if (item.level === 0) {
+        // 写入上一行
+        if (item_index >= 0 && rows[row_i]) {
+          C2ListProcess.stampEmbedItemAttrs(rows[row_i] as HTMLElement, item_index, pending_title, pending_body)
+          row_i++
+        }
+        item_index++
+        pending_title = item.content
+        pending_body = ""
+      } else {
+        pending_body = item.content
+      }
+    }
+    if (item_index >= 0 && rows[row_i]) {
+      C2ListProcess.stampEmbedItemAttrs(rows[row_i] as HTMLElement, item_index, pending_title, pending_body)
+    }
   }
 
   /** 列表数据转表格 */

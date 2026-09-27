@@ -84,7 +84,7 @@ By adopting a dual-licensing mechanism, a certain period of default free license
   'Edit mode render': 'Render in edit mode',
   'Edit mode render2': 'When on, AnyBlock renders in Live Preview. When off, Live Preview shows source text only. Source mode never renders AnyBlock.',
   'Embed edit': 'Embed edit',
-  'Embed edit2': 'When on, double-click a single rendered card in Live Preview to edit that card inline (not the whole block). Off by default. Line 1 = title, rest = body. Esc / Ctrl+Enter / blur to submit.',
+  'Embed edit2': 'When on, double-click a rendered item (card / col / tabs / timeline) in Live Preview to edit it inline. Line 1 = title, rest = body. Off by default. Esc / Ctrl+Enter / blur to submit.',
   'Submit': 'Submit',
   'Edit': 'Edit',
   'Refresh': 'Refresh',
