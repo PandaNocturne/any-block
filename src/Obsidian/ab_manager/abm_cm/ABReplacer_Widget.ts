@@ -109,6 +109,22 @@ export class ABReplacer_Widget extends WidgetType {
       return Promise.resolve()
     }
 
+    /** 用 DOM 实时位置刷新 rangeSpec（装饰 map 后 from_ch 会过期） */
+    const syncRangeFromDom = (): boolean => {
+      const pos = getPos()
+      if (!pos) {
+        if (this.lastFromPos == null) return false
+        this.rangeSpec.from_ch = this.lastFromPos
+        this.rangeSpec.to_ch = this.lastFromPos + this.content_withPrefix_length
+        return true
+      }
+      this.lastFromPos = pos.fromPos
+      this.rangeSpec.from_ch = pos.fromPos
+      this.rangeSpec.to_ch = pos.toPos
+      this.content_withPrefix_length = pos.toPos - pos.fromPos
+      return true
+    }
+
     // #endregion
 
     // AnyBlock主体部分，内容替换元素
@@ -252,8 +268,11 @@ export class ABReplacer_Widget extends WidgetType {
       btn_edit.classList.remove("edit-block-button"); // 移动端这里的编辑按钮有个独立逻辑，他会自动将你的编辑按钮替换掉
     }
     btn_edit.empty(); btn_edit.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_CODE2));
-    btn_edit.onclick = () => {
+    btn_edit.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       switch_more(false)
+      syncRangeFromDom()
       this.moveCursor()
     }
 
@@ -263,9 +282,12 @@ export class ABReplacer_Widget extends WidgetType {
       attr: {"aria-label": "Copy source content"}
     })
     btn_copy.empty(); btn_copy.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_COPY));
-    btn_copy.onclick = () => {
+    btn_copy.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       if (!this.global_editor) return
       switch_more(false)
+      syncRangeFromDom()
 
       // 这里的content有两种思路
       // - 一是最原本的fromPos-toPos。但可能包含不应该被包含的前缀，需要使用 parent_prefix 去除
@@ -288,7 +310,9 @@ export class ABReplacer_Widget extends WidgetType {
       attr: {"aria-label": "Make the block wider"}
     })
     btn_wider.empty(); btn_wider.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_WIDER));
-    btn_wider.onclick = () => {
+    btn_wider.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       if (dom_note.classList.contains("ab-super-width")) {
         dom_note.classList.remove("ab-super-width")
         this.div.classList.remove("ab-super-width-p")
@@ -305,9 +329,12 @@ export class ABReplacer_Widget extends WidgetType {
       attr: {"aria-label": "Refresh the block"}
     })
     btn_refresh.empty(); btn_refresh.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_REFRESH));
-    btn_refresh.onclick = () => {
+    btn_refresh.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
       switch_more(false)
       abConvertEvent(this.div)
+      syncRangeFromDom()
       this.moveCursor(-1)
     }
 
@@ -319,7 +346,11 @@ export class ABReplacer_Widget extends WidgetType {
     btn_more.empty(); btn_more.appendChild(sanitizeHTMLToDom(ABReplacer_Widget.STR_ICON_ELLIPSIS));
     let is_show = false
     switch_more(false)
-    btn_more.onclick = () => switch_more()
+    btn_more.onclick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      switch_more()
+    }
     /** 是否显示更多工具栏项 */
     function switch_more(_is_show?: boolean): void {
       if (_is_show !== undefined) is_show = _is_show

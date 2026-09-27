@@ -173,6 +173,7 @@ html[data-theme="dark"] #app {
 
   &>.ab-note{
     position: relative;
+    z-index: 0; // 创建层叠上下文，避免 tab <button> 盖住右侧控件
     /*padding: 24px 12px 12px 12px;*/
 
     // 嵌入编辑（双击单条目：卡片/标签/时间线）
@@ -215,6 +216,9 @@ html[data-theme="dark"] #app {
     box-sizing: border-box;
     position: absolute;
     top: 4px;
+    z-index: 20; // 高于 .ab-note 内的 tab 按钮等
+    pointer-events: auto;
+    cursor: pointer;
     &.ab-button-1 {
       right: 4px;
     }
@@ -308,8 +312,11 @@ html[data-theme="dark"] #app {
       color: var(--ab-tab-root-tx-color);
       border-bottom: none;
       border-radius: 10px 10px 0 0;
-      padding-right: 60px; // 这个是为了避免与编辑按钮重叠
+      // 预留右侧控件区（编辑+更多 ≈ 76px）；导航条本身不抢点击，仅 chip 可点
+      padding-right: 88px;
+      pointer-events: none;
       .ab-tab-nav-item {
+        pointer-events: auto;
         height: 38px; // 40-2
         box-shadow: none;
         border: none;

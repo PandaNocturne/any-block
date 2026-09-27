@@ -144,6 +144,7 @@ html[data-theme=dark] #app {
 }
 .ab-replace > .ab-note {
   position: relative;
+  z-index: 0;
   /*padding: 24px 12px 12px 12px;*/
 }
 .ab-replace > .ab-note .ab-items-item.ab-embed-editor,
@@ -180,6 +181,9 @@ html[data-theme=dark] #app {
   box-sizing: border-box;
   position: absolute;
   top: 4px;
+  z-index: 20;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .ab-replace > .ab-button.ab-button-1 {
   right: 4px;
@@ -261,9 +265,11 @@ html[data-theme=dark] #app {
   color: var(--ab-tab-root-tx-color);
   border-bottom: none;
   border-radius: 10px 10px 0 0;
-  padding-right: 60px;
+  padding-right: 88px;
+  pointer-events: none;
 }
 .ab-note .ab-tab-root .ab-tab-nav .ab-tab-nav-item {
+  pointer-events: auto;
   height: 38px;
   box-shadow: none;
   border: none;
