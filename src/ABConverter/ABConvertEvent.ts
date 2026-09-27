@@ -176,14 +176,16 @@ export function abConvertEvent(d: Element|Document, isCycle: boolean = false) {
   // 横向瀑布流: 纯css、高精度横向瀑布流: 未实现js
 
   // list2card，纵向瀑布流 (等宽瀑布流) 顺序重调事件
+  // CSS column-count 按列优先填充，源 DOM 顺序在横向阅读时会错乱；
+  // 这里按「行优先 → 列优先」重排，使视觉从左到右、从上到下与源顺序一致。
   // (通过flag，自动避免重新调用，手动刷新也不会重新调用)
   if (d.querySelector('.ab-items.ab-lay-vfall:not(.js-waterfall):not(.ab-lay-hfall):not(.ab-lay-grid)')) {
     const root_el_list = d.querySelectorAll(".ab-items.ab-lay-vfall:not(.js-waterfall):not(.ab-lay-hfall):not(.ab-lay-grid)")
     for (const root_el of root_el_list) {
       // 1. 准备原元素
       root_el.classList.add("js-waterfall") // 避免：触发两次时，第二次触发会以第一次触发的顺序为基准，再进行调整
-      const list_children = root_el.querySelectorAll(".ab-items-item")
-      // 计算列数和列宽
+      const list_children = root_el.querySelectorAll(":scope > .ab-items-item")
+      // 计算列数
       const columnCountTmp = parseInt(window.getComputedStyle(root_el).getPropertyValue('column-count'))
       let columnCount: number;
       if (columnCountTmp && !isNaN(columnCountTmp) && columnCountTmp>0) {
@@ -196,40 +198,17 @@ export function abConvertEvent(d: Element|Document, isCycle: boolean = false) {
         columnCount = 4;
         root_el.classList.add("ab-col"+columnCount)
       }
-      // const columnWidth = root_el.clientWidth / columnCount;
 
-      // 2. 准备高度缓存、元素缓存
-      const height_cache:number[] = []; // 缓存每列的当前高度，每次将新元素添加到高度最底的列中
+      // 2. 按源顺序 round-robin 分到各列，保证横向阅读顺序不被高度贪心打乱
       const el_cache:HTMLElement[][] = [];
       for (let i = 0; i < columnCount; i++) {
-        height_cache.push(0);
         el_cache.push([])
       }
+      list_children.forEach((children, index) => {
+        el_cache[index % columnCount].push(children as HTMLElement)
+      })
 
-      // 3. 得到顺序数组
-      for (const children of list_children) {
-        const minValue: number =  Math.min.apply(null, height_cache);
-        const minIndex: number =  height_cache.indexOf(minValue)
-        const heightTmp = parseInt(window.getComputedStyle(children).getPropertyValue("height"))
-        height_cache[minIndex] += (heightTmp && !isNaN(heightTmp) && heightTmp>0) ? heightTmp : 10;
-        el_cache[minIndex].push(children as HTMLElement)
-      }
-
-      // 3.2. 修复特殊情况下的异常：
-      //    特殊情况指：当分N列时，若 (length%N != 0 || length%N != N-1)，存在问题
-      //    或写成这样好理解些：当 (length%(N-1) != N || length%(N-1) != N-1)，最后一列会缺好几个时，存在问题
-      const fillNumber = columnCount-list_children.length%columnCount
-      if (fillNumber!=4) {
-        for (let i=0; i<fillNumber; i++) {
-          const children = document.createElement("div"); children.classList.add(".ab-items-item.placeholder"); children.setAttribute("style", "height: 20px")
-          const minValue: number =  Math.min.apply(null, height_cache);
-          const minIndex: number =  height_cache.indexOf(minValue)
-          height_cache[minIndex] += 20
-          el_cache[minIndex].push(children as HTMLElement)
-        }
-      }
-
-      // 4. 按顺序重新填入元素
+      // 3. 按列优先顺序重新填入元素 (配合 column-count 的列优先填充，视觉上恢复行优先)
       root_el.innerHTML = ""
       for (let i=0; i<columnCount; i++) {
         for (const j of el_cache[i]) {
