@@ -339,6 +339,19 @@ export class C2ListProcess{
     el.setAttribute("data-ab-card-body", body)
   }
 
+  /**
+   * 空标签内容面板：放可点击占位，避免高度为 0 / 点到父级导致无法触发内联编辑
+   */
+  static ensureEmptyTabContentPlaceholder(el: HTMLElement) {
+    const body = el.getAttribute("data-ab-item-body") ?? ""
+    if (body.trim() !== "") return
+    if (el.querySelector(":scope > .ab-tab-content-empty")) return
+    const ph = document.createElement("div")
+    ph.className = "ab-tab-content-empty"
+    ph.setAttribute("aria-hidden", "true")
+    el.appendChild(ph)
+  }
+
   /** 下次渲染 tabs 时激活的条目下标（嵌入编辑写回后消费一次） */
   private static pendingTabActivateIndex: number | null = null
 
@@ -444,6 +457,11 @@ export class C2ListProcess{
         continue
       }
     }
+
+    // 空内容面板补占位，保证可点击进入内联编辑
+    content.querySelectorAll(":scope > .ab-tab-content-item").forEach((node) => {
+      C2ListProcess.ensureEmptyTabContentPlaceholder(node as HTMLElement)
+    })
 
     // 动态部分
     // 元素全部创建完再来绑按钮事件，不然会有问题

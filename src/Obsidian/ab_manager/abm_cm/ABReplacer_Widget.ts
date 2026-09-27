@@ -199,13 +199,26 @@ export class ABReplacer_Widget extends WidgetType {
     const isEmbedHitTarget = (t: HTMLElement | null) => {
       if (!t?.closest) return false
       return !!t.closest(
-        ".ab-items-title, .ab-items-content, .ab-items-item, .ab-tab-nav-item, .ab-tab-content-item, .ab-embed-title-editor, .ab-embed-editor, .ab-embed-title-input"
+        ".ab-items-title, .ab-items-content, .ab-items-item, .ab-tab-nav-item, .ab-tab-content, .ab-tab-content-item, .ab-tab-content-empty, .ab-embed-title-editor, .ab-embed-editor, .ab-embed-title-input"
       )
     }
 
     const resolveEmbedHit = (target: HTMLElement) => {
       const titlePart = target.closest(".ab-items-title, .ab-tab-nav-item") as HTMLElement | null
-      const contentPart = target.closest(".ab-items-content, .ab-tab-content-item") as HTMLElement | null
+      let contentPart = target.closest(".ab-items-content, .ab-tab-content-item") as HTMLElement | null
+      // 空标签内容高度可能为 0，点击常落在 .ab-tab-content / 占位上
+      if (!contentPart) {
+        const tabContent = target.closest(".ab-tab-content") as HTMLElement | null
+        const emptyPh = target.closest(".ab-tab-content-empty") as HTMLElement | null
+        if (tabContent || emptyPh) {
+          const host = tabContent
+            ?? (emptyPh?.closest(".ab-tab-content") as HTMLElement | null)
+          contentPart = (host?.querySelector(
+            ':scope > .ab-tab-content-item[is_activate="true"]'
+          ) as HTMLElement | null)
+            ?? (emptyPh?.closest(".ab-tab-content-item") as HTMLElement | null)
+        }
+      }
       const hitTitle = !!(titlePart && !contentPart)
       const hitContent = !!contentPart
       if (!hitTitle && !hitContent) return null
@@ -788,6 +801,8 @@ export class ABReplacer_Widget extends WidgetType {
     C2ListProcess.stampEmbedItemAttrs(itemEl, itemIndex, title, body)
     if (body.trim() !== "") {
       ABConvertManager.getInstance().m_renderMarkdownFn(body, itemEl)
+    } else {
+      C2ListProcess.ensureEmptyTabContentPlaceholder(itemEl)
     }
   }
 

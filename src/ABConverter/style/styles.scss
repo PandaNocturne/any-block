@@ -414,7 +414,22 @@ html[data-theme="dark"] #app {
       padding: 10px 20px;
       .ab-tab-content-item {
         width: 100%;
+        max-width: 100%;
         box-sizing: border-box;
+        // 空面板需有可点区域，否则高度为 0 点不到内联编辑
+        &[data-ab-item-body=""] {
+          min-height: 3em;
+          cursor: text;
+        }
+        .ab-tab-content-empty {
+          min-height: 3em;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          opacity: 0.35;
+          border-radius: 4px;
+          border: 1px dashed color-mix(in srgb, var(--ab-tab-root-tx-color) 35%, transparent);
+        }
       }
     }
   }

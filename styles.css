@@ -361,7 +361,21 @@ html[data-theme=dark] #app {
 }
 .ab-note .ab-tab-root .ab-tab-content .ab-tab-content-item {
   width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
+}
+.ab-note .ab-tab-root .ab-tab-content .ab-tab-content-item[data-ab-item-body=""] {
+  min-height: 3em;
+  cursor: text;
+}
+.ab-note .ab-tab-root .ab-tab-content .ab-tab-content-item .ab-tab-content-empty {
+  min-height: 3em;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  opacity: 0.35;
+  border-radius: 4px;
+  border: 1px dashed color-mix(in srgb, var(--ab-tab-root-tx-color) 35%, transparent);
 }
 .ab-note td > p:first-child, .ab-note th > p:first-child,
 .ab-note td > ul:first-child, .ab-note th > ul:first-child,
