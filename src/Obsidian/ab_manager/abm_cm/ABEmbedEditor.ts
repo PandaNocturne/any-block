@@ -80,10 +80,39 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     return null
   }
 
+  // 先测量原渲染尺寸，empty 前锁定，避免双击后宽高塌缩/跳动
+  const rect = opts.containerEl.getBoundingClientRect()
+  const cs = window.getComputedStyle(opts.containerEl)
+  const lockedWidth = Math.max(rect.width, 80)
+  const lockedHeight = Math.max(rect.height, 48)
+  const prevInline = {
+    width: opts.containerEl.style.width,
+    minWidth: opts.containerEl.style.minWidth,
+    height: opts.containerEl.style.height,
+    minHeight: opts.containerEl.style.minHeight,
+    maxWidth: opts.containerEl.style.maxWidth,
+    boxSizing: opts.containerEl.style.boxSizing,
+    padding: opts.containerEl.style.padding,
+    margin: opts.containerEl.style.margin,
+  }
+  // 用 outline 提示编辑态，不挤占布局尺寸；保留原 padding/margin 观感
+  opts.containerEl.style.boxSizing = "border-box"
+  opts.containerEl.style.width = `${lockedWidth}px`
+  opts.containerEl.style.minWidth = `${lockedWidth}px`
+  opts.containerEl.style.minHeight = `${lockedHeight}px`
+  // 高度至少与原文一致，内容变长时可自然增高
+  opts.containerEl.style.height = "auto"
+  if (!opts.containerEl.style.padding && cs.padding && cs.padding !== "0px") {
+    opts.containerEl.style.padding = cs.padding
+  }
+
   opts.containerEl.empty()
   opts.containerEl.addClass("ab-embed-editor")
 
   const editorEl = opts.containerEl.createDiv({ cls: ["cm-table-widget", "ab-embed-editor-inner"] })
+  editorEl.style.minHeight = `${Math.max(lockedHeight - 8, 40)}px`
+  editorEl.style.width = "100%"
+  editorEl.style.boxSizing = "border-box"
 
   let destroyed = false
   let cm: EditorView | null = null
@@ -91,6 +120,17 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
 
   const getValue = (): string => {
     return cm?.state.doc.toString() ?? opts.value
+  }
+
+  const restoreBox = () => {
+    opts.containerEl.style.width = prevInline.width
+    opts.containerEl.style.minWidth = prevInline.minWidth
+    opts.containerEl.style.height = prevInline.height
+    opts.containerEl.style.minHeight = prevInline.minHeight
+    opts.containerEl.style.maxWidth = prevInline.maxWidth
+    opts.containerEl.style.boxSizing = prevInline.boxSizing
+    opts.containerEl.style.padding = prevInline.padding
+    opts.containerEl.style.margin = prevInline.margin
   }
 
   const destroy = () => {
@@ -104,6 +144,7 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     } catch (_) { /* ignore */ }
     cm = null
     opts.containerEl.removeClass("ab-embed-editor")
+    restoreBox()
   }
 
   const submit = () => {
@@ -140,6 +181,27 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
 
     buildLocalExtensions(): Extension[] {
       const extensions: Extension[] = super.buildLocalExtensions()
+      // 贴近原文排版：紧凑行高，避免默认编辑器把块撑得过大
+      extensions.push(
+        EditorView.theme({
+          "&": {
+            height: "100%",
+            fontSize: "inherit",
+          },
+          ".cm-scroller": {
+            fontFamily: "inherit",
+            lineHeight: "inherit",
+            overflow: "auto",
+          },
+          ".cm-content": {
+            padding: "0",
+            caretColor: "var(--text-normal)",
+          },
+          "&.cm-focused": {
+            outline: "none",
+          },
+        })
+      )
       extensions.push(
         Prec.highest(
           keymap.of([
@@ -201,6 +263,8 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
 
   window.setTimeout(() => {
     cm?.focus()
+    // 再次请求布局，确保 scroller 填满锁定高度
+    cm?.requestMeasure()
   }, 0)
 
   return { destroy, getValue }

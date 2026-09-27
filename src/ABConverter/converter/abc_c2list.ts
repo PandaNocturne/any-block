@@ -475,9 +475,30 @@ export class C2ListProcess{
   }
 
   /**
-   * 二列列表数据序列化为列表 md（与 list2c2data 互逆，用于嵌入编辑写回）
+   * 获取列表子项缩进串：跟随 Obsidian 编辑器「使用 Tab」/「Tab 宽度」配置
+   * - useTab=true → `\t`
+   * - 否则 → 重复 tabSize 次空格（默认 4）
    */
-  static c2data2list(c2listdata: List_C2ListItem): string {
+  static getListIndent(): string {
+    try {
+      const app = ABCSetting.obsidian.global_app as any
+      if (app?.vault?.getConfig) {
+        const useTab = !!app.vault.getConfig("useTab")
+        if (useTab) return "\t"
+        const tabSize = Number(app.vault.getConfig("tabSize"))
+        const n = (!isNaN(tabSize) && tabSize > 0) ? Math.floor(tabSize) : 4
+        return " ".repeat(n)
+      }
+    } catch (_) { /* ignore */ }
+    return "    " // 默认 4 空格
+  }
+
+  /**
+   * 二列列表数据序列化为列表 md（与 list2c2data 互逆，用于嵌入编辑写回）
+   * @param indent 子项缩进，默认读取 Obsidian 编辑器配置（Tab 或 N 空格）
+   */
+  static c2data2list(c2listdata: List_C2ListItem, indent?: string): string {
+    const prefix = indent ?? C2ListProcess.getListIndent()
     let out = ""
     for (const item of c2listdata) {
       if (item.level === 0) {
@@ -486,7 +507,7 @@ export class C2ListProcess{
         const body = item.content.replace(/\n$/, "")
         if (body.trim() === "") continue
         for (const line of body.split("\n")) {
-          out += `  ${line}\n`
+          out += `${prefix}${line}\n`
         }
       }
     }

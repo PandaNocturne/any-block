@@ -175,23 +175,36 @@ html[data-theme="dark"] #app {
     /*padding: 24px 12px 12px 12px;*/
 
     // 嵌入编辑（双击单条目：卡片/标签/时间线）
+    // 宽高由 JS 按原文锁定；CSS 仅做编辑态描边，避免改变布局尺寸
     .ab-items-item.ab-embed-editor,
     .ab-tab-content-item.ab-embed-editor,
     tr.ab-embed-editor,
     &.ab-embed-editor {
-      min-height: 4em;
-      border: 1px solid var(--interactive-accent);
-      border-radius: 6px;
-      padding: 4px 8px;
+      outline: 2px solid var(--interactive-accent);
+      outline-offset: -2px;
+      border: none !important;
+      border-radius: 4px;
       background-color: var(--background-primary);
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+      box-shadow: none;
+      margin: 0 !important;
+      overflow: hidden;
 
       .ab-embed-editor-inner {
-        min-height: 3em;
+        width: 100%;
+        height: 100%;
+        min-height: inherit;
+        box-sizing: border-box;
       }
 
       .cm-editor {
         background: transparent;
+        height: 100%;
+        font-size: inherit;
+      }
+
+      .cm-scroller {
+        font-family: var(--font-text, inherit);
+        line-height: var(--line-height-normal, 1.5);
       }
     }
   }
