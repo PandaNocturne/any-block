@@ -41,7 +41,7 @@ export interface ABSettingInterface {
 
   // 其他
   is_debug: boolean,                // 是否开启调试打印
-  reading_auto_refresh: boolean,    // 阅读模式下内容变更时是否自动强制刷新 (rebuildView)，默认关闭以避免无限刷新
+  reading_auto_refresh: boolean,    // 阅读模式下内容变更时是否自动强制刷新 (rebuildView)，默认开启；内置冷却以防自引用嵌入无限刷新
   enhance_refresh_time: number,     // 刷新增强的刷新时间 (ms) (<1000为关闭，最快1s)
   reg_header: string,               // 正则 - square brackets
   reg_header_noprefix: string,
@@ -97,7 +97,7 @@ export const AB_SETTINGS: ABSettingInterface = {
   }],
 
   is_debug: false,
-  reading_auto_refresh: false,
+  reading_auto_refresh: true,
   enhance_refresh_time: 2000,
   reg_header: ABReg.reg_header.toString(), // 举例: 可将 .* 修改成 (?:[^:]*) 以排除 [] 中有 : 情况
   reg_header_noprefix: ABReg.reg_header_noprefix.toString(), // 两个都要改
@@ -315,6 +315,23 @@ export class ABSettingTab extends PluginSettingTab {
     ab_tab_nav_item = el_tab_nav.createEl('button', {cls: 'ab-tab-nav-item', text: t("General")})
     ab_tab_content_item = el_tab_content.createEl('div', {cls: 'ab-tab-content-item'})
     new Setting(ab_tab_content_item).setName(t("General")).setHeading();
+    new Setting(ab_tab_content_item)
+      .setName(t("Edit mode render"))
+      .setDesc(t("Edit mode render2"))
+      .addToggle(toggle => toggle
+        // 编辑模式渲染开关：映射到 decoration_live；源码模式固定为 none
+        .setValue(settings.decoration_live !== ConfDecoration.none)
+        .onChange(async (value) => {
+          settings.decoration_live = value ? ConfDecoration.block : ConfDecoration.none
+          settings.decoration_source = ConfDecoration.none // 源码模式始终不渲染
+          await this.plugin.saveSettings()
+          // 立即刷新当前打开的 Markdown 视图，使开关立刻生效
+          this.app.workspace.getLeavesOfType('markdown').forEach(leaf => {
+            // @ts-expect-error WorkspaceLeaf 上存在 rebuildView
+            leaf.rebuildView?.()
+          })
+        })
+      )
     new Setting(ab_tab_content_item)
       .setName(t("Reading auto refresh"))
       .setDesc(t("Reading auto refresh2"))

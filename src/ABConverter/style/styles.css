@@ -661,6 +661,16 @@ html[data-theme=dark] #app {
   box-sizing: border-box;
   padding: 10px;
 }
+.ab-note .ab-items.ab-card:not(.ab-lay-hfall):not(.ab-lay-grid) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0rem;
+  -moz-column-count: unset;
+       column-count: unset;
+}
+.ab-note .ab-items.ab-card:not(.ab-lay-hfall):not(.ab-lay-grid) > .ab-items-item {
+  flex: 1 0 calc(33.33% - 1rem);
+}
 .ab-note .ab-items.ab-card .ab-items-item {
   box-sizing: border-box;
   color: var(--ab-tab-root-tx-color);
@@ -678,45 +688,18 @@ html[data-theme=dark] #app {
 .ab-note .ab-items.ab-card .ab-items-item .ab-items-title {
   border-bottom: 1px solid var(--ab-bright-color);
 }
-.ab-note .ab-items.ab-card.ab-lay-vfall:not(.ab-hfall) {
-  /*display: flex; // Flexbox 布局
-  flex-wrap: wrap; // 元素换行显示
-  gap: 1rem; // 间隙
-  .ab-items-item {
-    flex: 1 0 calc(25% - 1rem); // 每个项目的宽度大约为容器的 33.33%，减去间隙的一半
-  }*/
-  -moz-column-count: 4;
-       column-count: 4;
-  -moz-column-gap: 10px;
-       column-gap: 10px;
+.ab-note .ab-items.ab-card.ab-lay-vfall:not(.ab-lay-hfall):not(.ab-lay-grid) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0rem;
+  -moz-column-count: unset;
+       column-count: unset;
 }
-.ab-note .ab-items.ab-card.ab-lay-vfall:not(.ab-hfall) .ab-items-item {
-  -moz-column-break-inside: avoid;
-       break-inside: avoid-column;
-}
-.ab-note .ab-items.ab-card.ab-lay-vfall:not(.ab-hfall) {
-  /*display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-gap: 1rem; // 间隙
-  grid-template-rows: masonry; // 兼容有问题，只有火狐支持，还tm的要开选项
-  .ab-items-item {
-    width: 100%;
-    display: block;
-  }*/
-  /*display: flex;          // Flexbox 布局
-  flex-wrap: wrap; // 元素换行显示
-  // gap: 1rem;           // 间隙
-  flex-direction: column; // 按列填充
-  .ab-items-item {
-    position: relative;
-    width: calc(100% / 4);
-    padding: 5px;
-    box-sizing: border-box;
-    &:nth-child(4n+1){ order: 1; }
-    &:nth-child(4n+2){ order: 2; }
-    &:nth-child(4n+3){ order: 3; }
-    &:nth-child(4n+0){ order: 4; }
-  }*/
+.ab-note .ab-items.ab-card.ab-lay-vfall:not(.ab-lay-hfall):not(.ab-lay-grid) .ab-items-item {
+  flex: 1 0 calc(33.33% - 1rem);
+  box-sizing: border-box;
+  -moz-column-break-inside: auto;
+       break-inside: auto;
 }
 .ab-note .ab-items.ab-card.ab-lay-hfall .ab-items-item .ab-items-title {
   color: currentColor;
@@ -802,40 +785,64 @@ html[data-theme=dark] #app {
        column-count: 1 !important;
   grid-template-columns: repeat(1, 1fr) !important;
 }
+.ab-note .ab-items.ab-col1 > .ab-items-item {
+  flex: 1 0 calc(100% - 1rem) !important;
+}
 .ab-note .ab-items.ab-col2 {
   -moz-column-count: 2 !important;
        column-count: 2 !important;
   grid-template-columns: repeat(2, 1fr) !important;
+}
+.ab-note .ab-items.ab-col2 > .ab-items-item {
+  flex: 1 0 calc(50% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col3 {
   -moz-column-count: 3 !important;
        column-count: 3 !important;
   grid-template-columns: repeat(3, 1fr) !important;
 }
+.ab-note .ab-items.ab-col3 > .ab-items-item {
+  flex: 1 0 calc(33.33% - 1rem) !important;
+}
 .ab-note .ab-items.ab-col4 {
   -moz-column-count: 4 !important;
        column-count: 4 !important;
   grid-template-columns: repeat(4, 1fr) !important;
+}
+.ab-note .ab-items.ab-col4 > .ab-items-item {
+  flex: 1 0 calc(25% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col5 {
   -moz-column-count: 5 !important;
        column-count: 5 !important;
   grid-template-columns: repeat(5, 1fr) !important;
 }
+.ab-note .ab-items.ab-col5 > .ab-items-item {
+  flex: 1 0 calc(20% - 1rem) !important;
+}
 .ab-note .ab-items.ab-col6 {
   -moz-column-count: 6 !important;
        column-count: 6 !important;
   grid-template-columns: repeat(6, 1fr) !important;
+}
+.ab-note .ab-items.ab-col6 > .ab-items-item {
+  flex: 1 0 calc(16.66% - 1rem) !important;
 }
 .ab-note .ab-items.ab-col7 {
   -moz-column-count: 7 !important;
        column-count: 7 !important;
   grid-template-columns: repeat(7, 1fr) !important;
 }
+.ab-note .ab-items.ab-col7 > .ab-items-item {
+  flex: 1 0 calc(14.28% - 1rem) !important;
+}
 .ab-note .ab-items.ab-col8 {
   -moz-column-count: 8 !important;
        column-count: 8 !important;
   grid-template-columns: repeat(8, 1fr) !important;
+}
+.ab-note .ab-items.ab-col8 > .ab-items-item {
+  flex: 1 0 calc(12.5% - 1rem) !important;
 }
 .ab-note .ab-nodes {
   white-space: normal;

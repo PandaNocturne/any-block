@@ -131,7 +131,6 @@ const _abc_midt_card = ABConvert.factory({
     const c2listdata: List_C2ListItem = mditTabs2listdata(content, /^@card(.*)$/) // /^@[a-zA-Z]* (.*)$/
     C2ListProcess.c2data2items(c2listdata, el)
     el.querySelector("div")?.classList.add("ab-card")
-    el.querySelector("div")?.classList.add("ab-lay-vfall")
     return el
   }
 })

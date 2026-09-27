@@ -134,7 +134,7 @@ const ABAlias_json_mdit: ABAlias_json[] = [
   // {regex: /\|:::_140lne\|2?(timeline|时间线)\|/, replacement: "|title2timeline|"},
   // {regex: /\|:::_140lne\|2?(tabs?|标签页?)\||\|title2tabs?\|/, replacement: "|title2c2listdata|c2listdata2tab|"},
   // {regex: /\|:::_140lne\|2?(col|分栏)\||\|title2col\|/, replacement: "|title2c2listdata|c2listdata2items|addClass(ab-col)|"},
-  // {regex: /\|:::_140lne\|2?(card|卡片)\||\|title2card\|/, replacement: "|title2c2listdata|c2listdata2items|addClass(ab-card)|addClass(ab-lay-vfall)|"},
+  // {regex: /\|:::_140lne\|2?(card|卡片)\||\|title2card\|/, replacement: "|title2c2listdata|c2listdata2items|addClass(ab-card)|"},
   // {regex: /\|:::_140lne\|2?(nodes?|节点)\||\|(title2node|title2abMindmap)\|/, replacement: "|title2listdata|listdata2strict|listdata2nodes|"},
 
   // list  - 多叉多层树
@@ -168,7 +168,7 @@ const ABAlias_json_title: ABAlias_json[] = [
   {regex: /\|heading_140lne\|2?(timeline|时间线)\|/, replacement: "|title2timeline|"},
   {regex: /\|heading_140lne\|2?(tabs?|标签页?)\||\|title2tabs?\|/, replacement: "|title2c2listdata|c2listdata2tab|"},
   {regex: /\|heading_140lne\|2?(col|分栏)\||\|title2col\|/, replacement: "|title2c2listdata|c2listdata2items|addClass(ab-col)|"},
-  {regex: /\|heading_140lne\|2?(card|卡片)\||\|title2card\|/, replacement: "|title2c2listdata|c2listdata2items|addClass(ab-card)|addClass(ab-lay-vfall)|"},
+  {regex: /\|heading_140lne\|2?(card|卡片)\||\|title2card\|/, replacement: "|title2c2listdata|c2listdata2items|addClass(ab-card)|"},
   {regex: /\|heading_140lne\|2?(nodes?|节点)\||\|(title2node|title2abMindmap)\|/, replacement: "|title2listdata|listdata2strict|listdata2nodes|"},
 
   // list  - 多叉多层树
@@ -202,7 +202,7 @@ const ABAlias_json_list: ABAlias_json[] = [
   {regex: /\|list_140lne\|2?(timeline|时间线)\|/, replacement: "|list2timeline|"},
   {regex: /\|list_140lne\|2?(tabs?|标签页?)\||\|list2tabs?\|/, replacement: "|list2c2listdata|c2listdata2tab|"},
   {regex: /\|list_140lne\|2?(col|分栏)\||\|list2col\|/, replacement: "|list2c2listdata|c2listdata2items|addClass(ab-col)|"},
-  {regex: /\|list_140lne\|2?(card|卡片)\||\|list2card\|/, replacement: "|list2c2listdata|c2listdata2items|addClass(ab-card)|addClass(ab-lay-vfall)|"},
+  {regex: /\|list_140lne\|2?(card|卡片)\||\|list2card\|/, replacement: "|list2c2listdata|c2listdata2items|addClass(ab-card)|"},
   {regex: /\|list_140lne\|2?(nodes?|节点)\||\|(list2node|list2abMindmap)\|/, replacement: "|list2listdata|listdata2strict|listdata2nodes|"},
 
   // list  - 多叉多层树
