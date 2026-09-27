@@ -177,13 +177,14 @@ html[data-theme="dark"] #app {
     /*padding: 24px 12px 12px 12px;*/
 
     // 嵌入编辑：铺满原选区（class 在 title/content/tab-item 上，勿只写 ab-items-item）
+    // 注意：勿清 .cm-content/.cm-line 的 padding-left，否则有序/无序列表缩进与列表符会消失
     .ab-embed-editor {
       border-radius: 4px;
       background-color: transparent;
       box-shadow: none;
       margin: 0 !important;
       padding: 0 !important;
-      overflow: hidden;
+      overflow: auto;
       width: 100% !important;
       max-width: 100% !important;
       box-sizing: border-box !important;
@@ -198,8 +199,7 @@ html[data-theme="dark"] #app {
       .cm-editor,
       .cm-scroller,
       .cm-sizer,
-      .cm-contentContainer,
-      .cm-content {
+      .cm-contentContainer {
         max-width: none !important;
         width: 100% !important;
         min-width: 0 !important;
@@ -207,6 +207,16 @@ html[data-theme="dark"] #app {
         margin-left: 0 !important;
         margin-right: 0 !important;
         box-sizing: border-box !important;
+      }
+
+      .cm-content {
+        max-width: none !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        box-sizing: border-box !important;
+        caret-color: var(--text-normal);
       }
 
       .ab-embed-editor-inner {
@@ -230,24 +240,15 @@ html[data-theme="dark"] #app {
       .cm-scroller {
         font-family: var(--font-text, inherit);
         line-height: inherit;
-        padding: 0 !important;
+        // 仅清 scroller 的可读行宽边距，保留 content/line 的列表缩进
         padding-left: 0 !important;
         padding-right: 0 !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
       }
 
-      .cm-content {
-        padding: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-        caret-color: var(--text-normal);
-      }
-
       .cm-line {
         max-width: none !important;
-        padding-right: 0 !important;
-        padding-left: 0 !important;
       }
     }
   }

@@ -153,7 +153,7 @@ html[data-theme=dark] #app {
   box-shadow: none;
   margin: 0 !important;
   padding: 0 !important;
-  overflow: hidden;
+  overflow: auto;
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -168,8 +168,7 @@ html[data-theme=dark] #app {
 .ab-replace > .ab-note .ab-embed-editor .cm-editor,
 .ab-replace > .ab-note .ab-embed-editor .cm-scroller,
 .ab-replace > .ab-note .ab-embed-editor .cm-sizer,
-.ab-replace > .ab-note .ab-embed-editor .cm-contentContainer,
-.ab-replace > .ab-note .ab-embed-editor .cm-content {
+.ab-replace > .ab-note .ab-embed-editor .cm-contentContainer {
   max-width: none !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -177,6 +176,15 @@ html[data-theme=dark] #app {
   margin-left: 0 !important;
   margin-right: 0 !important;
   box-sizing: border-box !important;
+}
+.ab-replace > .ab-note .ab-embed-editor .cm-content {
+  max-width: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+  caret-color: var(--text-normal);
 }
 .ab-replace > .ab-note .ab-embed-editor .ab-embed-editor-inner {
   height: 100%;
@@ -196,22 +204,13 @@ html[data-theme=dark] #app {
 .ab-replace > .ab-note .ab-embed-editor .cm-scroller {
   font-family: var(--font-text, inherit);
   line-height: inherit;
-  padding: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 }
-.ab-replace > .ab-note .ab-embed-editor .cm-content {
-  padding: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  caret-color: var(--text-normal);
-}
 .ab-replace > .ab-note .ab-embed-editor .cm-line {
   max-width: none !important;
-  padding-right: 0 !important;
-  padding-left: 0 !important;
 }
 .ab-replace > .ab-button {
   box-sizing: border-box;

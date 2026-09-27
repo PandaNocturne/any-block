@@ -515,17 +515,15 @@ export class C2ListProcess{
         el_item = document.createElement("div"); el_items.appendChild(el_item); el_item.classList.add("ab-items-item")
         C2ListProcess.stampEmbedItemAttrs(el_item, card_index, item.content, "")
         const el_title = document.createElement("div"); el_item.appendChild(el_title); el_title.classList.add("ab-items-title")
+        C2ListProcess.stampEmbedItemAttrs(el_title, card_index, item.content, "")
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_title)
       }
       // b2. item内容
       else if (el_item) {
-        C2ListProcess.stampEmbedItemAttrs(
-          el_item,
-          card_index,
-          el_item.getAttribute("data-ab-item-title") || "",
-          item.content
-        )
+        const title = el_item.getAttribute("data-ab-item-title") || ""
+        C2ListProcess.stampEmbedItemAttrs(el_item, card_index, title, item.content)
         const el_content = document.createElement("div"); el_item.appendChild(el_content); el_content.classList.add("ab-items-content")
+        C2ListProcess.stampEmbedItemAttrs(el_content, card_index, title, item.content)
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_content)
       }
       // b3. item内容之前没有item标题，不合法，跳过

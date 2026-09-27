@@ -234,7 +234,7 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
             margin: "0",
           },
           ".cm-content": {
-            padding: "0",
+            // 勿清 padding：Obsidian 有序/无序列表缩进与列表符依赖 content/line 的 padding
             maxWidth: "none",
             width: "100%",
             marginLeft: "0",
@@ -244,7 +244,6 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
           },
           ".cm-line": {
             maxWidth: "none",
-            paddingRight: "0",
           },
           "&.cm-focused": {
             outline: "none",
@@ -298,42 +297,40 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   controller.editMode = editorInstance
   editorInstance.set(opts.value || "")
 
-  // 直接清掉 CM 内联/计算样式里的可读行宽与居中留白，使编辑区与原选区重合全覆盖
+  // 清掉可读行宽 / file-margins 造成的居中留白；勿动 .cm-content/.cm-line 的 padding（列表缩进依赖）
   const squashEmbedWidth = () => {
     if (!cm) return
     const setImp = (el: HTMLElement | null | undefined, prop: string, value: string) => {
       el?.style.setProperty(prop, value, "important")
     }
-    const fill = (el: HTMLElement | null | undefined) => {
+    const fillWidth = (el: HTMLElement | null | undefined, clearPad = false) => {
       if (!el) return
       setImp(el, "max-width", "none")
       setImp(el, "width", "100%")
       setImp(el, "min-width", "0")
-      setImp(el, "margin", "0")
       setImp(el, "margin-left", "0")
       setImp(el, "margin-right", "0")
-      setImp(el, "padding-left", "0")
-      setImp(el, "padding-right", "0")
       setImp(el, "box-sizing", "border-box")
+      if (clearPad) {
+        setImp(el, "padding-left", "0")
+        setImp(el, "padding-right", "0")
+      }
     }
 
-    fill(cm.dom)
-    fill(cm.scrollDOM)
-    fill(cm.contentDOM)
-    setImp(cm.scrollDOM, "padding", "0")
+    fillWidth(cm.dom, true)
+    fillWidth(cm.scrollDOM, true)
+    // content 只去 max-width/居中 margin，保留列表用的 padding
+    fillWidth(cm.contentDOM, false)
     setImp(cm.scrollDOM, "padding-top", "0")
     setImp(cm.scrollDOM, "padding-bottom", "0")
-    setImp(cm.contentDOM, "padding", "0")
     setImp(cm.dom, "height", "100%")
     setImp(cm.dom, "min-height", `${lockedHeight}px`)
 
     opts.containerEl.querySelectorAll<HTMLElement>(
-      ".ab-embed-editor-inner, .markdown-source-view, .cm-sizer, .cm-contentContainer, .cm-content, .cm-line"
+      ".ab-embed-editor-inner, .markdown-source-view, .cm-sizer, .cm-contentContainer"
     ).forEach((el) => {
-      fill(el)
-      if (el.classList.contains("cm-sizer") || el.classList.contains("cm-contentContainer")) {
-        setImp(el, "margin", "0")
-      }
+      fillWidth(el, el.classList.contains("ab-embed-editor-inner") || el.classList.contains("markdown-source-view"))
+      setImp(el, "margin", "0")
     })
 
     const inner = opts.containerEl.querySelector(".ab-embed-editor-inner") as HTMLElement | null
