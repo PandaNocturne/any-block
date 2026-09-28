@@ -704,7 +704,10 @@ export class ABReplacer_Widget extends WidgetType {
     if (!pairs.length) return null
     const newData = C2ListProcess.pairsToC2data(pairs)
     const newContent = isTitleSrc
-      ? C2ListProcess.c2data2title(newData)
+      ? C2ListProcess.c2data2title(
+          newData,
+          C2ListProcess.detectC2TitleHeadingLevel(oldContent),
+        )
       : C2ListProcess.c2data2list(newData)
     return this.replaceContentInFullSrc(fullSrc, oldContent, newContent)
   }

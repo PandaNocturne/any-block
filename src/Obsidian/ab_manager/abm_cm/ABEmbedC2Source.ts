@@ -104,7 +104,10 @@ export function applyC2PairsMutation(
   if (!pairs.length) return null
   const newData = C2ListProcess.pairsToC2data(pairs)
   const newContent = titleSrc
-    ? C2ListProcess.c2data2title(newData)
+    ? C2ListProcess.c2data2title(
+        newData,
+        C2ListProcess.detectC2TitleHeadingLevel(oldContent),
+      )
     : C2ListProcess.c2data2list(newData)
   return replaceContentInFullSrc(fullSrc, oldContent, newContent)
 }

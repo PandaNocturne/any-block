@@ -590,14 +590,27 @@ export class C2ListProcess{
       if (item.level === 0) {
         out += `- ${item.content}\n`
       } else {
-        const body = item.content.replace(/\n$/, "")
+        // 去掉正文首尾多余空行；标题与正文之间固定空一行
+        const body = item.content.replace(/^\n+/, "").replace(/\n$/, "")
         if (body.trim() === "") continue
+        out += `\n`
         for (const line of body.split("\n")) {
           out += `${prefix}${line}\n`
         }
       }
     }
     return out.replace(/\n$/, "")
+  }
+
+  /**
+   * 从标题源码检测根标题等级（`#` 个数），写回时保持原级别
+   */
+  static detectC2TitleHeadingLevel(text: string): number {
+    const first = (text.trimStart().split("\n")[0] ?? "")
+    const m = first.match(ABReg.reg_heading_noprefix)
+    if (!m || m[1]) return 1
+    // m[3] 为 `#+ `（井号+空格），与 title2c2data 一致
+    return Math.max(1, Math.min(6, m[3].length - 1))
   }
 
   /**
@@ -610,9 +623,10 @@ export class C2ListProcess{
       if (item.level === 0) {
         out += `${hashes} ${item.content}\n`
       } else {
-        const body = item.content.replace(/\n$/, "")
+        // 去掉正文首尾多余空行；标题与正文之间固定空一行
+        const body = item.content.replace(/^\n+/, "").replace(/\n$/, "")
         if (body.trim() === "") continue
-        out += body + "\n"
+        out += `\n${body}\n`
       }
     }
     return out.replace(/\n$/, "")
@@ -635,10 +649,11 @@ export class C2ListProcess{
   }
 
   /**
-   * 嵌入编辑用：去掉正文各行共有的前导缩进（渲染时不可见，编辑时会露出来）
+   * 嵌入编辑用：去掉正文各行共有的前导缩进（渲染时不可见，编辑时会露出来）；
+   * 并去掉首尾结构性空行（写回时由 c2data2list/title 统一补标题与正文间空行）
    */
   static normalizeC2BodyForEdit(body: string): string {
-    const text = body.replace(/\n$/, "")
+    let text = body.replace(/^\n+/, "").replace(/\n$/, "")
     if (!text) return ""
     const lines = text.split("\n")
     let minIndent = Infinity
