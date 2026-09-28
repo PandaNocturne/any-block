@@ -85,6 +85,8 @@ By adopting a dual-licensing mechanism, a certain period of default free license
   'Edit mode render2': 'When on, AnyBlock renders in Live Preview. When off, Live Preview shows source text only. Source mode never renders AnyBlock.',
   'Embed edit': 'Inline edit',
   'Embed edit2': 'When on, edit inline. Enter: Ctrl/Cmd+click or double-click title/content. Exit: Esc cancels; Ctrl/Cmd+Enter or blur submits. Card/col/tabs title and content edit separately (tab titles = plain text; others use Obsidian editor). Off by default.',
+  'Single click edit': 'Single-click edit',
+  'Single click edit2': 'When on, a single click enters inline edit (no double-click needed; Ctrl/Cmd+click still works). Tabs: inactive tabs switch on click; the active tab title enters edit. Requires Inline edit. Off by default.',
   'Force render': 'Force render mode',
   'Force render2': 'When on, AnyBlock stays rendered in Live Preview even if the cursor enters the block; only the block edit control can reveal source. Off by default.',
   'Match highlight': 'Match highlight',

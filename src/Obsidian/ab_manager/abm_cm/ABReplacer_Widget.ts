@@ -9,7 +9,7 @@ import {ABConvertManager} from "@/ABConverter/ABConvertManager"
 import { C2ListProcess, type List_C2ListItem } from "@/ABConverter/converter/abc_c2list"
 import type {MdSelectorRangeSpec} from "../../../CodeMirror2/ABSelector_Md"
 import { abConvertEvent } from '@/ABConverter/ABConvertEvent'
-import { isEmbedEditEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, restoreMainEditorContext, isForceRenderEnabled, type ABEmbedEditorHandle } from './ABEmbedEditor'
+import { isEmbedEditEnabled, isEmbedEditSingleClickEnabled, openABEmbedEditor, openABTitleTextEditor, getEmbedEditPlugin, restoreMainEditorContext, isForceRenderEnabled, type ABEmbedEditorHandle } from './ABEmbedEditor'
 import { enhanceABTabsChrome, hideABTabsMenu } from './ABTabsChrome'
 import type { C2ListPair } from "@/ABConverter/converter/abc_c2list"
 
@@ -449,11 +449,24 @@ export class ABReplacer_Widget extends WidgetType {
           return
         }
 
-        // Ctrl/Cmd / 双击进入嵌入编辑；单击切换
+        // Ctrl/Cmd / 双击进入嵌入编辑；单击切换（或单击编辑：已激活标签进编辑，未激活仍切换）
         if ((e.ctrlKey || e.metaKey) && isEmbedEditEnabled()) {
           e.preventDefault()
           lastEmbedTap = null
           startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+          return
+        }
+
+        if (isEmbedEditSingleClickEnabled()) {
+          const isActive = tabNav.getAttribute("is_activate") === "true"
+          if (isActive) {
+            e.preventDefault()
+            lastEmbedTap = null
+            startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+          } else {
+            C2ListProcess.activateTabIndex(tabRoot, tabIdx)
+            lastEmbedTap = null
+          }
           return
         }
 
@@ -497,6 +510,14 @@ export class ABReplacer_Widget extends WidgetType {
 
       // Ctrl/Cmd+点击：一键进入编辑
       if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        lastEmbedTap = null
+        startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
+        return
+      }
+
+      // 单击直接进入编辑
+      if (isEmbedEditSingleClickEnabled()) {
         e.preventDefault()
         lastEmbedTap = null
         startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)

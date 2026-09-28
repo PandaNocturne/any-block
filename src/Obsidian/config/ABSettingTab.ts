@@ -43,6 +43,7 @@ export interface ABSettingInterface {
   is_debug: boolean,                // 是否开启调试打印
   reading_auto_refresh: boolean,    // 阅读模式下内容变更时是否自动强制刷新 (rebuildView)，默认开启；内置冷却以防自引用嵌入无限刷新
   embed_edit: boolean,              // 编辑模式下双击渲染块进入嵌入编辑（参考 kanban），默认关闭
+  embed_edit_single_click: boolean, // 单击即可进入内联编辑（无需双击），默认关闭；需先开启 embed_edit
   force_render: boolean,            // 强制渲染：编辑模式下禁止光标误入还原源码，仅控件可还原，默认关闭
   match_highlight: boolean,         // 光标进入匹配块时用下划线标出源码范围，默认开启
   enhance_refresh_time: number,     // 刷新增强的刷新时间 (ms) (<1000为关闭，最快1s)
@@ -102,6 +103,7 @@ export const AB_SETTINGS: ABSettingInterface = {
   is_debug: false,
   reading_auto_refresh: true,
   embed_edit: false,
+  embed_edit_single_click: false,
   force_render: false,
   match_highlight: true,
   enhance_refresh_time: 2000,
@@ -345,6 +347,16 @@ export class ABSettingTab extends PluginSettingTab {
         .setValue(settings.embed_edit)
         .onChange(async (value) => {
           settings.embed_edit = value
+          await this.plugin.saveSettings()
+        })
+      )
+    new Setting(ab_tab_content_item)
+      .setName(t("Single click edit"))
+      .setDesc(t("Single click edit2"))
+      .addToggle(toggle => toggle
+        .setValue(settings.embed_edit_single_click)
+        .onChange(async (value) => {
+          settings.embed_edit_single_click = value
           await this.plugin.saveSettings()
         })
       )

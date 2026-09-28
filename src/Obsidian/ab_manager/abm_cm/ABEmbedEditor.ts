@@ -33,6 +33,12 @@ export function isEmbedEditEnabled(): boolean {
   return !!(p?.settings?.embed_edit)
 }
 
+/** 是否单击即可进入内联编辑（需同时开启 embed_edit） */
+export function isEmbedEditSingleClickEnabled(): boolean {
+  const p = _pluginRef as any
+  return !!(p?.settings?.embed_edit && p?.settings?.embed_edit_single_click)
+}
+
 /** 是否强制渲染（禁止光标误入还原源码，仅控件可还原） */
 export function isForceRenderEnabled(): boolean {
   const p = _pluginRef as any

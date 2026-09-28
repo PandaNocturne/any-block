@@ -9,6 +9,7 @@ import { ABConvertManager } from "@/ABConverter/ABConvertManager"
 import { C2ListProcess } from "@/ABConverter/converter/abc_c2list"
 import {
   isEmbedEditEnabled,
+  isEmbedEditSingleClickEnabled,
   openABEmbedEditor,
   openABTitleTextEditor,
   getEmbedEditPlugin,
@@ -373,6 +374,19 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
         return
       }
 
+      if (isEmbedEditSingleClickEnabled()) {
+        const isActive = tabNav.getAttribute("is_activate") === "true"
+        if (isActive) {
+          e.preventDefault()
+          lastEmbedTap = null
+          startEmbedEdit(tabNav, true, e.clientX, e.clientY)
+        } else {
+          C2ListProcess.activateTabIndex(tabRoot, tabIdx)
+          lastEmbedTap = null
+        }
+        return
+      }
+
       const key = `${tabIdx}:t`
       const now = Date.now()
       const isDouble =
@@ -410,6 +424,13 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
     }
 
     if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      lastEmbedTap = null
+      startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
+      return
+    }
+
+    if (isEmbedEditSingleClickEnabled()) {
       e.preventDefault()
       lastEmbedTap = null
       startEmbedEdit(hit.hitEl, hit.hitTitle, e.clientX, e.clientY)
