@@ -567,17 +567,18 @@ function openABTitleInputEditor(opts: ABTitleTextEditorOptions): ABEmbedEditorHa
   const stopCM = (e: Event) => {
     e.stopPropagation()
   }
-  const stopCMAndDefault = (e: Event) => {
+  const stopCMBubble = (e: Event) => {
     e.stopPropagation()
-    // 阻止 CM / Obsidian 把这次点击当成进入块源码
-    if (e.type === "mousedown" || e.type === "pointerdown") {
-      e.preventDefault()
-    }
+    // click/dblclick 挡默认即可；mousedown 不可 preventDefault，否则无法点选取消全选、放置光标
   }
 
-  for (const type of ["mousedown", "pointerdown", "mouseup", "click", "dblclick"] as const) {
-    input.addEventListener(type, stopCMAndDefault, true)
+  for (const type of ["mousedown", "pointerdown", "mouseup"] as const) {
+    input.addEventListener(type, stopCM, true)
     el.addEventListener(type, stopCM, true)
+  }
+  for (const type of ["click", "dblclick"] as const) {
+    input.addEventListener(type, stopCMBubble, true)
+    el.addEventListener(type, stopCMBubble, true)
   }
 
   input.addEventListener("keydown", (e: KeyboardEvent) => {
@@ -627,8 +628,8 @@ function openABTitleContentEditable(opts: ABTitleTextEditorOptions): ABEmbedEdit
   }
   el.style.cursor = "text"
   el.onclick = (ev) => {
+    // 挡 button 默认激活；不在 mousedown 上 preventDefault，否则无法点选取消全选
     ev.stopPropagation()
-    ev.preventDefault()
   }
 
   let destroyed = false
@@ -663,9 +664,9 @@ function openABTitleContentEditable(opts: ABTitleTextEditorOptions): ABEmbedEdit
     opts.onCancel?.()
   }
 
+  // 只 stopPropagation，勿 preventDefault(mousedown)：否则全选后无法点击放置光标
   const stopCM = (e: Event) => {
     e.stopPropagation()
-    if (e.type === "mousedown" || e.type === "pointerdown") e.preventDefault()
   }
   for (const type of ["mousedown", "pointerdown", "mouseup", "click", "dblclick"] as const) {
     el.addEventListener(type, stopCM, true)
