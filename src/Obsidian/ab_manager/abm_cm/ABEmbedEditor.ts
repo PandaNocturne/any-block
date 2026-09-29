@@ -83,6 +83,11 @@ export interface ABEmbedEditorOptions {
   onSubmit: (value: string) => void
   /** 取消（Esc，需 escapeToCancel） */
   onCancel?: () => void
+  /**
+   * Enter 键回调（若提供则 Enter 不换行而触发此回调，且不抢回主编辑区焦点）
+   * 用于 card/col 标题编辑回车后切到内容区
+   */
+  onEnter?: (value: string) => void
   /** Esc 走取消而非提交，默认 false */
   escapeToCancel?: boolean
   /** 关闭后可选：把焦点还给主编辑区 EditorView */
@@ -169,6 +174,8 @@ export interface ABEmbedEditorHandle {
   submit: () => void
   /** 主动取消并关闭（无 onCancel 时等同 destroy） */
   cancel: () => void
+  /** 抢回嵌入编辑器焦点（标题→内容切换时防主区抢焦） */
+  focus: () => void
 }
 
 /**
@@ -229,6 +236,7 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   let destroyed = false
   let cm: EditorView | null = null
   let editorInstance: any = null
+  const openedAt = Date.now()
   // 打开前记下主编辑区 activeEditor，关闭时还原（否则快捷键失效）
   const prevActiveEditor = (opts.app.workspace as any).activeEditor ?? null
 
@@ -256,6 +264,11 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     return cm?.state.doc.toString() ?? opts.value
   }
 
+  const focusEmbed = () => {
+    if (destroyed) return
+    try { cm?.focus() } catch (_) { /* ignore */ }
+  }
+
   const restoreBox = () => {
     opts.containerEl.style.width = prevInline.width
     opts.containerEl.style.minWidth = prevInline.minWidth
@@ -267,26 +280,31 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
     opts.containerEl.style.margin = prevInline.margin
   }
 
-  const destroy = () => {
+  /**
+   * @param silent Enter 切下一区：不 blur、不清 activeEditor，避免主编辑区抢焦
+   */
+  const destroy = (silent = false) => {
     if (destroyed) return
     destroyed = true
-    try {
-      cm?.contentDOM?.blur?.()
-    } catch (_) { /* ignore */ }
-    // 嵌入编辑会把 activeEditor 切走；先清空（kanban 同款），再由 reclaim 设回 MarkdownView
-    try {
-      const ws = opts.app.workspace as any
-      const ae = ws.activeEditor
-      if (
-        ae == null
-        || ae === controller
-        || ae === editorInstance
-        || ae === controller.editMode
-        || (ae && !(ae instanceof MarkdownView) && ae !== prevActiveEditor)
-      ) {
-        ws.activeEditor = null
-      }
-    } catch (_) { /* ignore */ }
+    if (!silent) {
+      try {
+        cm?.contentDOM?.blur?.()
+      } catch (_) { /* ignore */ }
+      // 嵌入编辑会把 activeEditor 切走；先清空（kanban 同款），再由 reclaim 设回 MarkdownView
+      try {
+        const ws = opts.app.workspace as any
+        const ae = ws.activeEditor
+        if (
+          ae == null
+          || ae === controller
+          || ae === editorInstance
+          || ae === controller.editMode
+          || (ae && !(ae instanceof MarkdownView) && ae !== prevActiveEditor)
+        ) {
+          ws.activeEditor = null
+        }
+      } catch (_) { /* ignore */ }
+    }
     // 弹出 MarkdownEditor 可能 push 的 keymap scope
     try {
       const scope = (editorInstance as any)?.scope
@@ -304,7 +322,7 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   }
 
   const finishAndRestore = (after: () => void) => {
-    destroy()
+    destroy(false)
     try { after() } catch (_) { /* ignore */ }
     // 写回/软恢复之后再抢回主编辑区上下文（否则快捷键仍指向已销毁 editor）
     restoreMainEditorContext(opts.app, prevActiveEditor, controller, opts.hostEditorView)
@@ -319,6 +337,14 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   const cancel = () => {
     if (destroyed) return
     finishAndRestore(() => opts.onCancel?.())
+  }
+
+  /** Enter 切下一编辑区：静默销毁，不抢回主编辑区焦点 */
+  const enterNext = () => {
+    if (destroyed || !opts.onEnter) return
+    const text = getValue()
+    destroy(true)
+    try { opts.onEnter(text) } catch (_) { /* ignore */ }
   }
 
   class ABInlineEditor extends MarkdownEditorClass {
@@ -394,6 +420,16 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
               },
               preventDefault: true,
             },
+            ...(opts.onEnter
+              ? [{
+                  key: "Enter",
+                  run: () => {
+                    enterNext()
+                    return true
+                  },
+                  preventDefault: true,
+                }]
+              : []),
           ])
         )
       )
@@ -410,6 +446,14 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
               window.setTimeout(() => {
                 if (destroyed) return
                 if (opts.containerEl.contains(document.activeElement)) return
+                // 切到同页其他嵌入编辑器时不提交
+                const ae = document.activeElement as HTMLElement | null
+                if (ae?.closest?.(".ab-embed-editor, .ab-embed-title-editor, .ab-embed-title-input")) return
+                // 刚打开时主区常抢焦：抢回而非提交（标题 Enter→内容竞态）
+                if (Date.now() - openedAt < 300) {
+                  focusEmbed()
+                  return
+                }
                 submit()
               }, 150)
               return false
@@ -484,14 +528,18 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
 
   // 打开时不要把 activeEditor 切到假 controller。
   // Obsidian MarkdownEditor 聚焦时仍可能自行写入 owner；关闭路径必须清掉并抢回 MarkdownView。
+  focusEmbed()
   window.setTimeout(() => {
     squashEmbedWidth()
-    cm?.focus()
+    focusEmbed()
     cm?.requestMeasure()
-    window.setTimeout(squashEmbedWidth, 50)
+    window.setTimeout(() => {
+      squashEmbedWidth()
+      focusEmbed()
+    }, 50)
   }, 0)
 
-  return { destroy, getValue, submit, cancel }
+  return { destroy, getValue, submit, cancel, focus: focusEmbed }
 }
 
 export interface ABTitleTextEditorOptions {
@@ -611,6 +659,7 @@ function openABTitleInputEditor(opts: ABTitleTextEditorOptions): ABEmbedEditorHa
     getValue: () => (destroyed ? opts.value : input.value),
     submit,
     cancel,
+    focus: () => { try { input.focus() } catch (_) { /* ignore */ } },
   }
 }
 
@@ -716,5 +765,6 @@ function openABTitleContentEditable(opts: ABTitleTextEditorOptions): ABEmbedEdit
     getValue: () => (destroyed ? opts.value : getText()),
     submit,
     cancel,
+    focus: () => { try { el.focus() } catch (_) { /* ignore */ } },
   }
 }

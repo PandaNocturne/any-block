@@ -265,6 +265,71 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
       ? title
       : C2ListProcess.normalizeC2BodyForEdit(body)
 
+    /** 打开同条目的内容区编辑（标题回车后切入） */
+    const openCardContentEdit = (pendingTitle: string, pendingBody: string) => {
+      const itemHost = (hitEl.closest(".ab-items-item") as HTMLElement | null) || attrHost
+      let contentEl = itemHost.querySelector(":scope > .ab-items-content") as HTMLElement | null
+      // 仅有标题、无 body 时 DOM 可能没有 content 节点，补一个空容器再进编辑
+      if (!contentEl) {
+        contentEl = document.createElement("div")
+        contentEl.classList.add("ab-items-content")
+        itemHost.appendChild(contentEl)
+      }
+      C2ListProcess.stampEmbedItemAttrs(itemHost, itemIndex, pendingTitle, pendingBody)
+      C2ListProcess.stampEmbedItemAttrs(hitEl, itemIndex, pendingTitle, pendingBody)
+      C2ListProcess.stampEmbedItemAttrs(contentEl, itemIndex, pendingTitle, pendingBody)
+
+      embedEditing = true
+      const contentHandle = openABEmbedEditor({
+        plugin,
+        app: plugin.app,
+        containerEl: contentEl,
+        file,
+        value: C2ListProcess.normalizeC2BodyForEdit(pendingBody),
+        escapeToCancel: true,
+        hostEditorView,
+        onCancel: () => {
+          activeEmbedHandle = null
+          embedEditing = false
+          disarmOutsideExit()
+          softRestoreMarkdownPart(contentEl!, pendingBody)
+          if (pendingTitle !== title) {
+            const newFull = commitItem(pendingTitle, pendingBody)
+            if (newFull != null) saveFullSrc(newFull)
+          }
+        },
+        onSubmit: (bodyText: string) => {
+          activeEmbedHandle = null
+          embedEditing = false
+          disarmOutsideExit()
+          const newBody = bodyText.replace(/\n$/, "")
+          if (pendingTitle === title && newBody === pendingBody.replace(/\n$/, "")) {
+            softRestoreMarkdownPart(contentEl!, pendingBody)
+            return
+          }
+          const newFull = commitItem(pendingTitle, newBody)
+          if (newFull == null) {
+            new Notice("写入失败：无法解析条目结构")
+            softRestoreMarkdownPart(contentEl!, pendingBody)
+            return
+          }
+          saveFullSrc(newFull)
+        },
+      })
+      if (!contentHandle) {
+        embedEditing = false
+        activeEmbedHandle = null
+        disarmOutsideExit()
+        restoreMainEditorContext(plugin.app, prevActiveEditor, null, hostEditorView)
+      } else {
+        activeEmbedHandle = contentHandle
+        armOutsideExit()
+        contentHandle.focus()
+        window.setTimeout(() => contentHandle.focus(), 0)
+        window.setTimeout(() => contentHandle.focus(), 50)
+      }
+    }
+
     embedEditing = true
     const handle = openABEmbedEditor({
       plugin,
@@ -275,6 +340,14 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
       clickCoords: { x: clientX, y: clientY },
       escapeToCancel: true,
       hostEditorView,
+      onEnter: (isCardTitle && hitTitle)
+        ? (newText: string) => {
+            activeEmbedHandle = null
+            const newTitle = newText.replace(/\n$/, "").split("\n")[0]?.trim() || title
+            softRestoreMarkdownPart(hitEl, newTitle)
+            openCardContentEdit(newTitle, body)
+          }
+        : undefined,
       onCancel: () => {
         activeEmbedHandle = null
         embedEditing = false
@@ -295,7 +368,7 @@ export function wireABEmbedC2Host(opts: ABEmbedC2HostOptions) {
         let newTitle = title
         let newBody = body
         if (hitTitle) {
-          newTitle = trimmed.split("\n").map((l) => l.trim()).filter(Boolean).join(" ") || title
+          newTitle = trimmed.split("\n")[0]?.trim() || title
         } else {
           newBody = trimmed
         }

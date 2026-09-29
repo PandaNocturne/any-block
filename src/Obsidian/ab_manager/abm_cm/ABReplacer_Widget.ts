@@ -334,6 +334,72 @@ export class ABReplacer_Widget extends WidgetType {
         ? title
         : C2ListProcess.normalizeC2BodyForEdit(body)
 
+      /** 打开同条目的内容区编辑（标题回车后切入） */
+      const openCardContentEdit = (pendingTitle: string, pendingBody: string) => {
+        const itemHost = (hitEl.closest(".ab-items-item") as HTMLElement | null) || attrHost
+        let contentEl = itemHost.querySelector(":scope > .ab-items-content") as HTMLElement | null
+        // 仅有标题、无 body 时 DOM 可能没有 content 节点，补一个空容器再进编辑
+        if (!contentEl) {
+          contentEl = document.createElement("div")
+          contentEl.classList.add("ab-items-content")
+          itemHost.appendChild(contentEl)
+        }
+        C2ListProcess.stampEmbedItemAttrs(itemHost, itemIndex, pendingTitle, pendingBody)
+        C2ListProcess.stampEmbedItemAttrs(hitEl, itemIndex, pendingTitle, pendingBody)
+        C2ListProcess.stampEmbedItemAttrs(contentEl, itemIndex, pendingTitle, pendingBody)
+
+        embedEditing = true
+        const contentHandle = openABEmbedEditor({
+          plugin,
+          app: plugin.app,
+          containerEl: contentEl,
+          file,
+          value: C2ListProcess.normalizeC2BodyForEdit(pendingBody),
+          escapeToCancel: true,
+          hostEditorView: view,
+          onCancel: () => {
+            activeEmbedHandle = null
+            embedEditing = false
+            disarmOutsideExit()
+            this.softRestoreMarkdownPart(contentEl!, pendingBody)
+            // 标题已在切入前软恢复；若标题有改动仍写回
+            if (pendingTitle !== title) {
+              const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, pendingTitle, pendingBody)
+              if (newFull != null) save(newFull, true)
+            }
+          },
+          onSubmit: (bodyText: string) => {
+            activeEmbedHandle = null
+            embedEditing = false
+            disarmOutsideExit()
+            const newBody = bodyText.replace(/\n$/, "")
+            if (pendingTitle === title && newBody === pendingBody.replace(/\n$/, "")) {
+              this.softRestoreMarkdownPart(contentEl!, pendingBody)
+              return
+            }
+            const newFull = this.patchC2ItemInBlockSource(fullSrc, itemIndex, pendingTitle, newBody)
+            if (newFull == null) {
+              new Notice("写入失败：无法解析条目结构")
+              this.softRestoreMarkdownPart(contentEl!, pendingBody)
+              return
+            }
+            save(newFull, true)
+          },
+        })
+        if (!contentHandle) {
+          embedEditing = false
+          activeEmbedHandle = null
+          disarmOutsideExit()
+          restoreMainEditorContext(plugin.app, prevActiveEditor, null, view)
+        } else {
+          activeEmbedHandle = contentHandle
+          armOutsideExit()
+          contentHandle.focus()
+          window.setTimeout(() => contentHandle.focus(), 0)
+          window.setTimeout(() => contentHandle.focus(), 50)
+        }
+      }
+
       embedEditing = true
       const handle = openABEmbedEditor({
         plugin,
@@ -344,6 +410,14 @@ export class ABReplacer_Widget extends WidgetType {
         clickCoords: { x: clientX, y: clientY },
         escapeToCancel: true,
         hostEditorView: view,
+        onEnter: (isCardTitle && hitTitle)
+          ? (newText: string) => {
+              activeEmbedHandle = null
+              const newTitle = newText.replace(/\n$/, "").split("\n")[0]?.trim() || title
+              this.softRestoreMarkdownPart(hitEl, newTitle)
+              openCardContentEdit(newTitle, body)
+            }
+          : undefined,
         onCancel: () => {
           activeEmbedHandle = null
           embedEditing = false
@@ -366,8 +440,8 @@ export class ABReplacer_Widget extends WidgetType {
           let newTitle = title
           let newBody = body
           if (hitTitle) {
-            // 标题：合并为单行写回
-            newTitle = trimmed.split("\n").map((l) => l.trim()).filter(Boolean).join(" ") || title
+            // 标题失焦/Ctrl+Enter：仅取首行作标题
+            newTitle = trimmed.split("\n")[0]?.trim() || title
           } else {
             newBody = trimmed
           }
