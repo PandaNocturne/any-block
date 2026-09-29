@@ -229,6 +229,8 @@ export class C2ListProcess{
         })
       } else { // b2. 子内容
         if (current_content.trim()=="") { // 第一行的子内容前缀提取
+          // 跳过标题与正文之间的空行，避免渲染时内容区顶部多出一空段
+          if (line.trim() === "") continue
           if (match_list && match_list[1]) {
             // 嵌套列表：`- ` 前的缩进
             current_content_prefix = match_list[1]
@@ -590,10 +592,9 @@ export class C2ListProcess{
       if (item.level === 0) {
         out += `- ${item.content}\n`
       } else {
-        // 去掉正文首尾多余空行；标题与正文之间固定空一行
+        // 去掉正文首尾多余空行；列表模式标题与正文紧挨，不插空行
         const body = item.content.replace(/^\n+/, "").replace(/\n$/, "")
         if (body.trim() === "") continue
-        out += `\n`
         for (const line of body.split("\n")) {
           out += `${prefix}${line}\n`
         }
@@ -650,7 +651,7 @@ export class C2ListProcess{
 
   /**
    * 嵌入编辑用：去掉正文各行共有的前导缩进（渲染时不可见，编辑时会露出来）；
-   * 并去掉首尾结构性空行（写回时由 c2data2list/title 统一补标题与正文间空行）
+   * 并去掉首尾结构性空行（标题源写回时由 c2data2title 补标题与正文间空行）
    */
   static normalizeC2BodyForEdit(body: string): string {
     let text = body.replace(/^\n+/, "").replace(/\n$/, "")
