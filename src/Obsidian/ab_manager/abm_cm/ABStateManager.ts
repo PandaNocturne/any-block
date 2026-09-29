@@ -366,7 +366,6 @@ export class ABStateManager {
     let is_current_cursor_in = false // 当前光标是否在ab块区域内
     const forceRender = isForceRenderEnabled()
     const matchHighlight = isMatchHighlightEnabled()
-    let bounceCursorTo: number | null = null // 强制渲染时，误入块内则弹回块外
 
     const isCancelDemote = (from: number, to: number) =>
       this.customData.cancelFlag.some((flag) => flag >= from && flag <= to)
@@ -422,20 +421,16 @@ export class ABStateManager {
         }
         // 关闭高亮：不挂 mark，该范围无 replace widget，源码自然显示
       }
-      // 强制渲染：光标误入仍保持渲染，并准备将光标弹回块外
+      // 强制渲染：光标误入仍保持已渲染块，不重建、不弹回（重建/弹回会卡死编辑区）
+      // 仅通过块上编辑控件 + cancelFlag 才还原源码
       else if (isCursorIn && forceRender) {
         const decoration = Decoration.replace({
           widget: new ABReplacer_Widget(rangeSpec, this.editor, this.customData),
         })
-        list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
-        if (bounceCursorTo == null) {
-          const c = cursorSpec.from
-          const mid = (rangeSpec.from_ch + rangeSpec.to_ch) / 2
-          if (c <= mid) {
-            bounceCursorTo = Math.max(0, rangeSpec.from_ch - 1)
-          } else {
-            bounceCursorTo = rangeSpec.to_ch + 1
-          }
+        if (typeof updateMode == 'number' && updateMode >= rangeSpec.from_ch && updateMode <= rangeSpec.to_ch) {
+          list_decoration_change.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
+        } else {
+          list_decoration_nochange.push(decoration.range(rangeSpec.from_ch, rangeSpec.to_ch))
         }
       }
       // 该ab区域显示为渲染的ab块 - 变化
@@ -461,19 +456,6 @@ export class ABStateManager {
       }
     }
     // #endregion
-
-    // 强制渲染：误入块内的光标弹回外侧（延迟到本轮 update 之后，避免事务重入）
-    if (bounceCursorTo != null) {
-      const to = bounceCursorTo
-      const editor = this.editor
-      const docLen = editor.getValue().length
-      const safeTo = Math.max(0, Math.min(to, docLen))
-      queueMicrotask(() => {
-        try {
-          editor.setCursor(editor.offsetToPos(safeTo))
-        } catch (_) { /* ignore */ }
-      })
-    }
 
     // #region 若没有变化项，可提前返回
     // 变化项包括: 装饰集变化, 光标进出范围集变化，编辑模式变化
