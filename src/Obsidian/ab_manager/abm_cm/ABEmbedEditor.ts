@@ -85,9 +85,9 @@ export interface ABEmbedEditorOptions {
   onCancel?: () => void
   /**
    * Enter 键回调（若提供则 Enter 不换行而触发此回调，且不抢回主编辑区焦点）
-   * 用于 card/col 标题编辑回车后切到内容区
+   * 用于 card/col 标题编辑回车后切到内容区；cursorPos 为按下时的光标位置
    */
-  onEnter?: (value: string) => void
+  onEnter?: (value: string, cursorPos?: number) => void
   /** Esc 走取消而非提交，默认 false */
   escapeToCancel?: boolean
   /** 关闭后可选：把焦点还给主编辑区 EditorView */
@@ -343,8 +343,9 @@ export function openABEmbedEditor(opts: ABEmbedEditorOptions): ABEmbedEditorHand
   const enterNext = () => {
     if (destroyed || !opts.onEnter) return
     const text = getValue()
+    const cursorPos = cm?.state.selection.main.head
     destroy(true)
-    try { opts.onEnter(text) } catch (_) { /* ignore */ }
+    try { opts.onEnter(text, cursorPos) } catch (_) { /* ignore */ }
   }
 
   class ABInlineEditor extends MarkdownEditorClass {

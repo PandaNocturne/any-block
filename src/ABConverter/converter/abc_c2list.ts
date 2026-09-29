@@ -542,6 +542,8 @@ export class C2ListProcess{
       else if (el_item) {
         const title = el_item.getAttribute("data-ab-item-title") || ""
         C2ListProcess.stampEmbedItemAttrs(el_item, card_index, title, item.content)
+        const el_title = el_item.querySelector(":scope > .ab-items-title") as HTMLElement | null
+        if (el_title) C2ListProcess.stampEmbedItemAttrs(el_title, card_index, title, item.content)
         const el_content = document.createElement("div"); el_item.appendChild(el_content); el_content.classList.add("ab-items-content")
         C2ListProcess.stampEmbedItemAttrs(el_content, card_index, title, item.content)
         ABConvertManager.getInstance().m_renderMarkdownFn(item.content, el_content)
@@ -647,6 +649,37 @@ export class C2ListProcess{
     }
     if (cur) pairs.push(cur)
     return pairs
+  }
+
+  /**
+   * 标题编辑：首行作标题，其余行并入正文（避免多行标题被压成一行或丢弃）
+   */
+  static splitC2TitleOverflow(text: string, existingBody = ""): { title: string; body: string } {
+    const trimmed = text.replace(/\n$/, "")
+    const lines = trimmed.split("\n")
+    const title = (lines[0] ?? "").trim()
+    const overflow = lines.slice(1).join("\n").replace(/\n$/, "")
+    const oldBody = existingBody.replace(/\n$/, "")
+    let body = oldBody
+    if (overflow.trim()) {
+      body = oldBody.trim() ? `${overflow}\n${oldBody}` : overflow
+    }
+    return { title, body }
+  }
+
+  /**
+   * 标题区按 Enter：在光标处插入换行语义，再按首行/其余行拆成标题与正文
+   */
+  static splitC2TitleAtCursor(
+    text: string,
+    cursorPos: number | undefined,
+    existingBody = "",
+  ): { title: string; body: string } {
+    const pos = cursorPos == null
+      ? text.length
+      : Math.max(0, Math.min(cursorPos, text.length))
+    const withBreak = text.slice(0, pos) + "\n" + text.slice(pos)
+    return C2ListProcess.splitC2TitleOverflow(withBreak, existingBody)
   }
 
   /**

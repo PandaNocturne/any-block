@@ -273,10 +273,18 @@ export class ABReplacer_Widget extends WidgetType {
       )
       if (itemIndex < 0) return
 
-      const title = attrHost.getAttribute("data-ab-item-title")
+      // 标题节点可能仍带着空 body 标记；优先从条目容器读完整 title/body
+      const itemHost = (hitEl.closest(".ab-items-item") as HTMLElement | null)
+        || (hitEl.closest(".ab-tab-root") && attrHost)
+        || attrHost
+      const title = itemHost.getAttribute("data-ab-item-title")
+        ?? itemHost.getAttribute("data-ab-card-title")
+        ?? attrHost.getAttribute("data-ab-item-title")
         ?? attrHost.getAttribute("data-ab-card-title")
         ?? ""
-      const body = attrHost.getAttribute("data-ab-item-body")
+      const body = itemHost.getAttribute("data-ab-item-body")
+        ?? itemHost.getAttribute("data-ab-card-body")
+        ?? attrHost.getAttribute("data-ab-item-body")
         ?? attrHost.getAttribute("data-ab-card-body")
         ?? ""
 
@@ -411,11 +419,12 @@ export class ABReplacer_Widget extends WidgetType {
         escapeToCancel: true,
         hostEditorView: view,
         onEnter: (isCardTitle && hitTitle)
-          ? (newText: string) => {
+          ? (newText: string, cursorPos?: number) => {
               activeEmbedHandle = null
-              const newTitle = newText.replace(/\n$/, "").split("\n")[0]?.trim() || title
+              const split = C2ListProcess.splitC2TitleAtCursor(newText, cursorPos, body)
+              const newTitle = split.title || title
               this.softRestoreMarkdownPart(hitEl, newTitle)
-              openCardContentEdit(newTitle, body)
+              openCardContentEdit(newTitle, split.body)
             }
           : undefined,
         onCancel: () => {
@@ -440,8 +449,10 @@ export class ABReplacer_Widget extends WidgetType {
           let newTitle = title
           let newBody = body
           if (hitTitle) {
-            // 标题失焦/Ctrl+Enter：仅取首行作标题
-            newTitle = trimmed.split("\n")[0]?.trim() || title
+            // 首行作标题，其余行并入正文（粘贴多行时不丢内容）
+            const split = C2ListProcess.splitC2TitleOverflow(trimmed, body)
+            newTitle = split.title || title
+            newBody = split.body
           } else {
             newBody = trimmed
           }
